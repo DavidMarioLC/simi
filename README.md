@@ -13,7 +13,34 @@ npm run build
 npm run dev
 ```
 
-## Instalación local
+## Controles antes de commit y push
+
+`npm ci` instala automáticamente los hooks versionados de `.githooks` mediante `core.hooksPath` local. En un clon que ya tiene dependencias, ejecuta `npm run hooks:install`. Si tienes otra ruta de hooks configurada, la instalación se detiene para que puedas revisar el conflicto antes de reemplazarla.
+
+- **Pre-commit:** `npm run check:commit` comprueba tipos y ejecuta las pruebas unitarias.
+- **Pre-push:** `npm run check:push` compila la extensión y ejecuta todas las pruebas.
+
+Antes del primer push instala el navegador de pruebas:
+
+```sh
+npx playwright install chromium
+```
+
+Cualquier fallo bloquea la operación. Los hooks validan el árbol de trabajo actual, incluido el contenido sin staging; conviene mantenerlo alineado con lo que vas a enviar. No modifican el staging. Necesitas Node.js, npm y las dependencias instaladas disponibles en el entorno desde el que ejecutas Git.
+
+## Integración continua
+
+El workflow `.github/workflows/ci.yml` ejecuta `npm run check:ci` en cada push y pull request de GitHub: comprueba tipos, compila y ejecuta todas las pruebas. Usa Ubuntu y Node.js 24, instala dependencias con `npm ci` y prepara Chromium con las bibliotecas del sistema. Puedes consultar la ejecución en la pestaña **Actions** del repositorio y descargar el informe HTML de Playwright durante 7 días.
+
+Para ejecutar los mismos controles localmente:
+
+```sh
+npm run check:ci
+```
+
+La instalación de hooks se omite en CI. La comprobación de traducciones con modelos reales, `npm run probe:native`, continúa siendo manual.
+
+## Instalación de la extensión
 
 1. Ejecutar `npm run build`.
 2. Abrir `chrome://extensions` y activar «Modo de desarrollador».
