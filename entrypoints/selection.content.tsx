@@ -1,6 +1,8 @@
 import { createRoot } from 'react-dom/client';
 import { TranslationBubble } from '../components/TranslationBubble';
 import { TranslationController, type TranslationState } from '../lib/translation';
+import { NotebookHost } from '../lib/notebook-host';
+import { notebookRect, type Geometry } from '../lib/notebooks';
 import '../assets/tailwind.css';
 
 export default defineContentScript({
@@ -9,25 +11,28 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
   async main(ctx) {
     let enabled = (await browser.storage.local.get('enabled')).enabled !== false;
-    let captured: { text: string; range: Range } | undefined;
+    let captured: { kind: 'local'; text: string; range: Range } | { kind: 'notebook'; text: string; iframe: HTMLIFrameElement; geometry: Geometry } | undefined;
     let element: HTMLElement | undefined;
     let dragging = false;
     let root: ReturnType<typeof createRoot>;
     let frame = 0;
 
     const close = () => {
+      notebooks.invalidate();
       captured = undefined;
       element = undefined;
       controller.close();
     };
     const position = (panel: HTMLElement) => {
       element = panel;
-      if (!captured || !captured.range.startContainer.isConnected || !captured.range.endContainer.isConnected) { close(); return; }
-      const rect = [...captured.range.getClientRects()].find(r => r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth);
+      if (!captured) { close(); return; }
+      if (captured.kind === 'local' && (!captured.range.startContainer.isConnected || !captured.range.endContainer.isConnected)) { close(); return; }
+      const rect = captured.kind === 'notebook' ? notebookRect(captured.iframe, captured.geometry)
+        : [...captured.range.getClientRects()].find(r => r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth);
       if (!rect) { close(); return; }
       const gap = 8;
       const size = panel.getBoundingClientRect();
-      const x = Math.max(gap, Math.min(innerWidth - size.width - gap, rect.left + rect.width / 2 - size.width / 2));
+      const x = Math.max(gap, Math.min(innerWidth - size.width - gap, (rect.left + rect.right) / 2 - size.width / 2));
       const above = rect.top - size.height - gap;
       const y = above >= gap ? above : Math.max(gap, Math.min(rect.bottom + gap, innerHeight - size.height - gap));
       panel.style.left = `${x}px`;
@@ -39,6 +44,19 @@ export default defineContentScript({
       root.render(<TranslationBubble state={state} activate={() => controller.activate()} retry={() => controller.retry()} close={close} position={position} />);
     };
     const controller = new TranslationController(() => typeof Translator === 'undefined' ? undefined : Translator, render);
+    const notebooks = new NotebookHost({
+      enabled: () => enabled && ctx.isValid,
+      close,
+      select(text, iframe, geometry) {
+        captured = { kind: 'notebook', text, iframe, geometry };
+        void controller.request(text);
+      },
+      position(geometry) {
+        if (captured?.kind !== 'notebook') return;
+        captured.geometry = geometry;
+        if (element) position(element);
+      },
+    });
     const ui = await createShadowRootUi(ctx, {
       name: 'simi-translator', position: 'inline', anchor: 'body',
       isolateEvents: true,
@@ -52,6 +70,7 @@ export default defineContentScript({
     });
     ui.mount();
     ui.shadowHost.dataset.ready = 'true';
+    ctx.onInvalidated(notebooks.mount());
 
     const insideUi = (event: Event) => event.composedPath().includes(ui.shadowHost);
     const editable = (node: Node | null) => {
@@ -66,8 +85,9 @@ export default defineContentScript({
       const text = selection.toString();
       if (!text.trim()) { close(); return; }
       const range = selection.getRangeAt(0).cloneRange();
-      if (captured?.text === text && captured.range.startContainer === range.startContainer && captured.range.startOffset === range.startOffset && captured.range.endContainer === range.endContainer && captured.range.endOffset === range.endOffset) return;
-      captured = { text, range };
+      if (captured?.kind === 'local' && captured.text === text && captured.range.startContainer === range.startContainer && captured.range.startOffset === range.startOffset && captured.range.endContainer === range.endContainer && captured.range.endOffset === range.endOffset) return;
+      notebooks.invalidate();
+      captured = { kind: 'local', text, range };
       void controller.request(text);
     };
     ctx.addEventListener(document, 'pointerdown', event => {
@@ -92,7 +112,7 @@ export default defineContentScript({
       if ((event as KeyboardEvent).key === 'Escape') close();
     });
     ctx.addEventListener(document, 'selectionchange', () => {
-      if (dragging || ui.shadow.activeElement || !captured) return;
+      if (dragging || ui.shadow.activeElement || captured?.kind !== 'local') return;
       const selection = getSelection();
       if (!selection || selection.isCollapsed || selection.toString() !== captured.text) close();
     });
@@ -102,6 +122,14 @@ export default defineContentScript({
     };
     ctx.addEventListener(document, 'scroll', event => { if (!insideUi(event)) reposition(); }, { capture: true, passive: true });
     ctx.addEventListener(window, 'resize', reposition);
+    ctx.addEventListener(window, 'popstate', () => notebooks.check());
+    const navigation = (window as Window & { navigation?: EventTarget }).navigation;
+    if (navigation) ctx.addEventListener(navigation, 'currententrychange', () => notebooks.check());
+    if (location.origin === 'https://github.com') {
+      const notebookChanges = new MutationObserver(() => { notebooks.check(); if (captured?.kind === 'notebook') reposition(); });
+      notebookChanges.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['src', 'style', 'class', 'hidden'] });
+      ctx.onInvalidated(() => notebookChanges.disconnect());
+    }
     ctx.addEventListener(window, 'pagehide', event => { if (event.persisted) close(); else controller.dispose(); });
     let preferenceRevision = 0;
     const onPreference = (changes: Record<string, { newValue?: unknown }>, area: string) => {

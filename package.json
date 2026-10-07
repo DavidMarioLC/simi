@@ -15,6 +15,7 @@
     "check:push": "npm run build && npm test",
     "check:ci": "npm run typecheck && npm run check:push",
     "probe:native": "node scripts/probe-native.mjs",
+    "probe:notebooks": "node scripts/probe-notebooks.mjs",
     "test": "playwright test",
     "test:unit": "playwright test translation.spec.ts"
   },

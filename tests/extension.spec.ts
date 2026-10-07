@@ -23,15 +23,16 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); });
 
-type World = { id: number; origin: string };
-async function attachMock(context: BrowserContext, page: Page, extensionId: string, mode = 'available') {
+type World = { id: number; origin: string; auxData?: { frameId?: string } };
+async function attachMock(context: BrowserContext, page: Page, extensionId: string, mode = 'available', targetUrl = url) {
   const session = await context.newCDPSession(page);
   const worlds: World[] = [];
   session.on('Runtime.executionContextCreated', ({ context }) => worlds.push(context));
   await session.send('Runtime.enable');
-  await page.goto(url);
+  await page.goto(targetUrl);
   await page.locator('simi-translator[data-ready=true]').waitFor({ state: 'attached' });
-  const world = worlds.find(c => c.origin === `chrome-extension://${extensionId}`);
+  const { frameTree } = await session.send('Page.getFrameTree');
+  const world = worlds.find(c => c.origin === `chrome-extension://${extensionId}` && c.auxData?.frameId === frameTree.frame.id);
   expect(world).toBeTruthy();
   await session.send('Runtime.evaluate', { contextId: world!.id, expression: `
     Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { isActive: false } });
@@ -58,7 +59,7 @@ async function attachMock(context: BrowserContext, page: Page, extensionId: stri
     };
     if (__simiMock.mode === 'absent') globalThis.Translator = undefined;
   ` });
-  return { session, world: world!.id };
+  return { session, world: world!.id, worlds };
 }
 
 async function launch(profile: string) {
@@ -284,4 +285,198 @@ test('preferencia en dos pestañas, solicitudes pendientes y persistencia de per
     await select(content, '#phrase');
     await expect(bubble(content)).toBeVisible();
   } finally { await activeContext.close(); await rm(f.profile, { recursive: true, force: true }); }
+});
+
+const notebookPageUrl = 'https://github.com/simi-fixture/notebooks/blob/main/lesson.ipynb';
+const notebookViewerUrl = 'https://notebooks.githubusercontent.com/view/ipynb?nwo=simi-fixture%2Fnotebooks&path=lesson.ipynb#fixture-viewer';
+const notebookHtml = `<!doctype html><html><body style="margin:0;padding:24px;font:18px/1.6 system-ui;min-height:1600px">
+<p id="markdown">The browser can translate this notebook.</p><div id="cells"><p>Hello world</p><p>Keep reading without leaving the page.</p></div>
+<p id="slow">Slow notebook request</p><p id="fast">Latest notebook request</p>
+<input value="Secret"><div id="editable" contenteditable="true">Editable text</div>
+<p id="bottom" style="margin-top:700px">Notebook bottom</p></body></html>`;
+const notebookParentHtml = `<!doctype html><html><body style="margin:0;padding:40px;min-height:2000px;font:18px/1.6 system-ui">
+<p id="word">Hello world</p><p id="phrase">Good morning</p><div id="clip" style="margin-top:100px"><iframe id="notebook" src="${notebookViewerUrl}" style="display:block;width:700px;height:400px;border:4px solid black" sandbox="allow-scripts allow-same-origin allow-top-navigation"></iframe></div>
+<iframe id="other" src="https://other.example/frame"></iframe></body></html>`;
+
+async function setupNotebook(mode = 'available', targetUrl = notebookPageUrl) {
+  const profile = await mkdtemp(join(tmpdir(), 'simi-notebook-'));
+  const { context, id } = await launch(profile);
+  await context.route('https://github.com/simi-fixture/**', route => route.fulfill({ contentType: 'text/html', body: notebookParentHtml }));
+  await context.route('https://notebooks.githubusercontent.com/**', route => route.fulfill({ contentType: 'text/html', body: notebookHtml }));
+  await context.route('https://other.example/**', route => route.fulfill({ contentType: 'text/html', body: notebookHtml }));
+  const page = context.pages()[0]!;
+  const mock = await attachMock(context, page, id, mode, targetUrl);
+  await page.frameLocator('#notebook').locator('#markdown').waitFor();
+  return { context, page, id, profile, ...mock, cleanup: async () => { await context.close(); await rm(profile, { recursive: true, force: true }); } };
+}
+
+async function selectNotebook(page: Page, selector = '#markdown', method: 'pointer' | 'keyboard' = 'pointer') {
+  await page.frameLocator('#notebook').locator(selector).evaluate((element, method) => {
+    const selection = getSelection()!, range = document.createRange(); range.selectNodeContents(element);
+    document.dispatchEvent(method === 'pointer' ? new PointerEvent('pointerdown', { bubbles: true }) : new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+    selection.removeAllRanges(); selection.addRange(range);
+    document.dispatchEvent(method === 'pointer' ? new PointerEvent('pointerup', { bubbles: true }) : new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+  }, method);
+}
+async function prepareNotebook(page: Page) {
+  await selectNotebook(page);
+  await page.getByRole('button', { name: 'Activar traducción' }).click();
+  await expect(page.getByTestId('translation-result')).toHaveText('ES: The browser can translate this notebook.');
+}
+
+test('notebook: selección en iframe, teclado, párrafos e interfaz única en el principal', async () => {
+  const f = await setupNotebook();
+  try {
+    await prepareNotebook(f.page);
+    expect(await f.page.frameLocator('#notebook').locator('simi-translator').count()).toBe(0);
+    await selectNotebook(f.page, '#cells', 'keyboard');
+    await expect(f.page.getByTestId('translation-result')).toContainText('Keep reading');
+    const calls = await mockValue(f.session, f.world, '__simiMock.calls');
+    expect(calls[1]).toContain('\n');
+    expect(await mockValue(f.session, f.world, '__simiMock.creates')).toBe(1);
+    await expect(f.page.frameLocator('#notebook').locator('#markdown')).toHaveText('The browser can translate this notebook.');
+    await selectNotebook(f.page, '#editable');
+    await expect(bubble(f.page)).toHaveCount(0);
+    await f.page.frameLocator('#other').locator('#markdown').evaluate(element => {
+      const s = getSelection()!, r = document.createRange(); r.selectNodeContents(element); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    });
+    await expect(bubble(f.page)).toHaveCount(0);
+  } finally { await f.cleanup(); }
+});
+
+test('notebook: selección real por ratón y teclado dentro del visor', async () => {
+  const f = await setupNotebook();
+  try {
+    const box = (await f.page.frameLocator('#notebook').locator('#markdown').boundingBox())!;
+    await f.page.mouse.move(box.x + 1, box.y + 15); await f.page.mouse.down();
+    await f.page.mouse.move(box.x + 95, box.y + 15, { steps: 8 }); await f.page.mouse.up();
+    await f.page.getByRole('button', { name: 'Activar traducción' }).click();
+    await expect(f.page.getByTestId('translation-result')).toBeVisible();
+    await f.page.frameLocator('#notebook').locator('#markdown').evaluate(element => {
+      const s = getSelection()!, r = document.createRange(); r.setStart(element.firstChild!, 0); r.collapse(true); s.removeAllRanges(); s.addRange(r);
+    });
+    // Devolver foco al frame sin modificar la selección desde la interfaz principal.
+    await f.page.frameLocator('#notebook').locator('body').evaluate(element => (element as HTMLElement).focus());
+    await f.page.locator('#notebook').focus();
+    await f.page.keyboard.press('Shift+ArrowRight');
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: T');
+    await f.page.keyboard.press('Escape');
+    await expect(bubble(f.page)).toHaveCount(0);
+  } finally { await f.cleanup(); }
+});
+
+test('notebook: posición, scroll de ambos documentos, escala y recorte por contenedor', async () => {
+  const f = await setupNotebook();
+  try {
+    await prepareNotebook(f.page);
+    const before = (await bubble(f.page).boundingBox())!.y;
+    await f.page.evaluate(() => window.scrollTo(0, 40));
+    await expect.poll(async () => (await bubble(f.page).boundingBox())?.y).toBeLessThan(before);
+    await f.page.frameLocator('#notebook').locator('body').evaluate(() => window.scrollTo(0, 10));
+    await expect.poll(async () => (await bubble(f.page).boundingBox())?.y).toBeLessThan(before - 40);
+    await f.page.locator('#notebook').evaluate(el => { (el as HTMLElement).style.transformOrigin = 'top left'; (el as HTMLElement).style.transform = 'scale(.6)'; });
+    await expect(bubble(f.page)).toBeVisible();
+    const box = (await bubble(f.page).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(900);
+    await f.page.locator('#clip').evaluate(el => { (el as HTMLElement).style.overflow = 'hidden'; (el as HTMLElement).style.height = '10px'; });
+    await expect(bubble(f.page)).toHaveCount(0);
+    await f.page.locator('#clip').evaluate(el => { (el as HTMLElement).style.height = '400px'; });
+    await selectNotebook(f.page);
+    await expect(bubble(f.page)).toBeVisible();
+    await f.page.frameLocator('#notebook').locator('body').evaluate(() => window.scrollTo(0, 500));
+    await expect(bubble(f.page)).toHaveCount(0);
+  } finally { await f.cleanup(); }
+});
+
+test('notebook: selección vigente, cierre, preferencias y sustitución del visor', async () => {
+  const f = await setupNotebook();
+  try {
+    await prepareNotebook(f.page);
+    await selectNotebook(f.page, '#slow');
+    await expect(f.page.getByRole('status')).toContainText('Traduciendo');
+    await select(f.page, '#phrase');
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Good morning');
+    await selectNotebook(f.page, '#slow');
+    await expect(f.page.getByRole('status')).toContainText('Traduciendo');
+    await f.page.frameLocator('#notebook').locator('body').evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await expect(bubble(f.page)).toHaveCount(0);
+    await selectNotebook(f.page, '#fast');
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Latest notebook request');
+    const popup = await f.context.newPage(); await popup.goto(`chrome-extension://${f.id}/popup.html`);
+    await popup.getByRole('switch').click(); await expect(bubble(f.page)).toHaveCount(0);
+    await selectNotebook(f.page); await expect(bubble(f.page)).toHaveCount(0);
+    await popup.getByRole('switch').click();
+    await selectNotebook(f.page); await expect(bubble(f.page)).toBeVisible();
+    await f.page.locator('#notebook').evaluate(el => el.replaceWith(el.cloneNode(true)));
+    await expect(bubble(f.page)).toHaveCount(0);
+    await f.page.frameLocator('#notebook').locator('#markdown').waitFor();
+    await selectNotebook(f.page); await expect(bubble(f.page)).toBeVisible();
+    await f.page.mouse.click(850, 650); await expect(bubble(f.page)).toHaveCount(0);
+    await selectNotebook(f.page); await expect(bubble(f.page)).toBeVisible();
+    await f.page.evaluate(() => history.pushState({}, '', '/simi-fixture/notebooks/blob/main/README.md'));
+    await expect(bubble(f.page)).toHaveCount(0);
+    await selectNotebook(f.page); await expect(bubble(f.page)).toHaveCount(0);
+  } finally { await f.cleanup(); }
+});
+
+test('notebook: relay aislado por pestaña, documentos obsoletos y reinicio del worker', async () => {
+  const f = await setupNotebook();
+  try {
+    await prepareNotebook(f.page);
+    const second = await f.context.newPage();
+    const other = await attachMock(f.context, second, f.id, 'available', notebookPageUrl);
+    await expect(bubble(second)).toHaveCount(0);
+    const viewerFrame = f.page.frames().find(frame => frame.url().startsWith('https://notebooks.githubusercontent.com/'))!;
+    const viewerSession = await f.context.newCDPSession(viewerFrame);
+    const viewerWorlds: World[] = [];
+    viewerSession.on('Runtime.executionContextCreated', ({ context }) => viewerWorlds.push(context));
+    await viewerSession.send('Runtime.enable');
+    const viewerWorld = viewerWorlds.find(c => c.origin === `chrome-extension://${f.id}`)!;
+    const attempts = await viewerSession.send('Runtime.evaluate', { contextId: viewerWorld.id, awaitPromise: true, returnByValue: true, expression: `
+      (async()=>{
+        const bad = await chrome.runtime.sendMessage({channel:'simi-notebook-v1',kind:'begin',token:'unknown',revision:100,actionTime:Date.now()});
+        const malformed = await chrome.runtime.sendMessage({channel:'simi-notebook-v1',kind:'selection',token:'unknown',revision:100,generation:1,text:'Forged',geometry:{width:1,height:1,rects:[{left:0,top:0,right:null,bottom:1}]}}).catch(()=>undefined);
+        return {bad,malformed};
+      })()
+    ` });
+    expect(attempts.result.value.bad.accepted).toBe(false);
+    await viewerSession.send('Runtime.evaluate', { contextId: viewerWorld.id, expression: 'globalThis.Translator = undefined' });
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: The browser can translate this notebook.');
+    expect(await mockValue(other.session, other.world, '__simiMock.calls.length')).toBe(0);
+    await f.session.send('ServiceWorker.enable');
+    await f.session.send('ServiceWorker.stopAllWorkers');
+    await selectNotebook(f.page, '#cells');
+    await expect(f.page.getByTestId('translation-result')).toContainText('Keep reading');
+    await selectNotebook(second);
+    await second.getByRole('button', { name: 'Activar traducción' }).click();
+    await expect(second.getByTestId('translation-result')).toHaveText('ES: The browser can translate this notebook.');
+    await expect(f.page.getByTestId('translation-result')).toContainText('Keep reading');
+    await select(f.page, '#phrase');
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Good morning');
+    await selectNotebook(f.page, '#editable');
+    await expect(bubble(f.page)).toHaveCount(0);
+  } finally { await f.cleanup(); }
+});
+
+for (const mode of ['absent', 'unavailable']) {
+  test(`notebook: API ${mode} en principal muestra indisponibilidad`, async () => {
+    const f = await setupNotebook(mode);
+    try {
+      await selectNotebook(f.page);
+      await expect(f.page.getByRole('status')).toContainText(mode === 'absent' ? 'no está disponible' : 'no permite');
+      await expect(f.page.getByRole('button', { name: 'Activar traducción' })).toHaveCount(0);
+      expect(await mockValue(f.session, f.world, '__simiMock.calls.length')).toBe(0);
+    } finally { await f.cleanup(); }
+  });
+}
+
+test('notebook: visor de origen admitido en una página ajena permanece excluido', async () => {
+  const f = await setupNotebook('available', notebookPageUrl.replace('lesson.ipynb', 'README.md'));
+  try {
+    await selectNotebook(f.page);
+    await f.page.waitForTimeout(150);
+    await expect(bubble(f.page)).toHaveCount(0);
+    expect(await mockValue(f.session, f.world, '__simiMock.calls.length')).toBe(0);
+  } finally { await f.cleanup(); }
 });

@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-07T18:56:36.423Z",
+  "simulated": false,
+  "results": [
+    {
+      "url": "https://github.com/bokeh/bokeh-notebooks/blob/main/tutorial/06%20-%20Linking%20and%20Interactions.ipynb",
+      "samples": [
+        {
+          "method": "mouse",
+          "selected": "Now that we know from the ",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "Ahora que sabemos por el"
+        },
+        {
+          "method": "keyboard",
+          "selected": "N",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "norte"
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "api": "function",
+        "availability": "downloadable"
+      },
+      "original": "Now that we know from the previous chapter how multiple plots can be placed together in a layout, we can start to look at how different plots can be linked together, or how plots can be linked to widgets.",
+      "scroll": true,
+      "escape": true
+    },
+    {
+      "url": "https://github.com/bokeh/bokeh-notebooks/blob/main/tutorial/07%20-%20Bar%20and%20Categorical%20Data%20Plots.ipynb",
+      "samples": [
+        {
+          "method": "mouse",
+          "selected": "Bar charts are a common an",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "Los gráficos de barras son un"
+        },
+        {
+          "method": "keyboard",
+          "selected": "B",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "si"
+        }
+      ],
+      "capabilities": {
+        "secure": true,
+        "api": "function",
+        "availability": "available"
+      },
+      "original": "Bar charts are a common and important type of plot. Bokeh makes it simple to create all sorts of stacked or nested bar charts, and to deal with categorical data in general.",
+      "scroll": true,
+      "escape": true
+    }
+  ],
+  "version": "154.0.8037.98"
+}

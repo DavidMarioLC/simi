@@ -47,3 +47,26 @@ La captura nativa mostró la burbuja encima de la selección de dos párrafos. E
 Las pruebas automatizadas con Chromium utilizan una implementación simulada introducida por CDP exclusivamente en el mundo aislado de la extensión, y controlan la activación para verificar explícitamente el botón. No requieren descargar modelos. La simulación, los ejemplos y el control de activación pertenecen a `tests/` y no se compilan dentro de la extensión.
 
 La suite cubre disponibilidad, descarga, errores, reutilización, selección por ratón y teclado, párrafos, estilos agresivos del sitio, posicionamiento en bordes, scroll, resize, textos largos, cierres, solicitudes atrasadas, campos excluidos y preferencias en dos pestañas y entre sesiones. La selección real con teclado usa la navegación por cursor de Chromium. Estas pruebas no demuestran calidad ni disponibilidad del modelo nativo.
+
+## Notebooks de GitHub
+
+El content script principal sigue limitado al documento principal. Un segundo script captura selecciones únicamente en `https://notebooks.githubusercontent.com/view/ipynb`, en un iframe directo registrado por la página del notebook activo de `github.com`. Otros iframes, páginas de repositorio que no muestran un `.ipynb` y visores incrustados en otros sitios permanecen excluidos.
+
+La selección y sus rectángulos viajan por mensajería interna de la extensión, validada por pestaña, frame, documento y revisión, hasta el documento principal. El service worker actúa como relay sin almacenar el contenido; no se expone el texto mediante `window.postMessage`, ni se añaden permisos de historial o mensajería externa. Los únicos permisos declarados siguen siendo `storage` y las coincidencias de content scripts. El traductor y la burbuja se ejecutan en el principal, por lo que no necesitan que el iframe delegue Translator API. La política de permisos del documento principal sigue siendo efectiva.
+
+Las pruebas con simulación usan fixtures en los orígenes de GitHub y del visor mediante interceptación de red de Playwright, sin relajar la identificación de producción. Cubren selección real de ratón y teclado en el iframe, saltos de línea, geometría con scroll en ambos documentos, escala y recorte, selección vigente entre documentos, cierres, exclusiones, API ausente o denegada, sustitución del visor y preferencias.
+
+### Evidencia nativa del visor
+
+Comprobación del 7 de octubre de 2026 con Chrome **154.0.8037.98** en macOS, perfil temporal independiente y paquete de producción. Se usaron los notebooks públicos `06 - Linking and Interactions.ipynb` y `07 - Bar and Categorical Data Plots.ipynb` de `bokeh/bokeh-notebooks`, sin interceptar respuestas de GitHub ni sustituir Translator API.
+
+| Selección real con ratón | Traducción del modelo local |
+| --- | --- |
+| `Now that we know from the ` | `Ahora que sabemos por el` |
+| `Bar charts are a common an` | `Los gráficos de barras son un` |
+
+Se seleccionó un fragmento visible de una celda Markdown con ratón y se extendió una selección con teclado real en cada notebook. La burbuja siguió el desplazamiento de la página, el texto original permaneció intacto y Escape la cerró. Al navegar al segundo notebook se preparó el contexto correspondiente. En esta ejecución no hizo falta pulsar «Activar traducción» ni reintentar: las selecciones permitieron preparar el traductor automáticamente. La primera disponibilidad fue `downloadable` y la segunda `available`.
+
+La prueba de teclado seleccionó únicamente `N` y `B`; el modelo devolvió `norte` y `si`. Esto verifica la detección y el flujo de traducción, sin afirmar calidad lingüística para caracteres o frases incompletas. La disponibilidad y los gestos de activación siguen dependiendo de Chrome y del contexto.
+
+El [reporte nativo conservado](notebook-verification.json) incluye las selecciones exactas y los resultados. La [captura del visor](notebook-preview.png) muestra la burbuja junto a la selección. Para repetir la comprobación, ejecutar `npm run build` y `npm run probe:notebooks`; los informes de cada ejecución se guardan temporalmente en `test-results/`.
