@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-07T15:37:43.543Z",
+  "version": "154.0.8037.98",
+  "simulated": false,
+  "results": [
+    {
+      "surface": "HTTPS / mundo aislado",
+      "capabilities": {
+        "secure": true,
+        "api": "function",
+        "availability": "downloadable"
+      },
+      "samples": [
+        {
+          "selector": "#word",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "Hola"
+        },
+        {
+          "selector": "#phrase",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "Buenos días, ¿cómo estás?"
+        },
+        {
+          "selector": "#paragraphs",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "El navegador puede traducir texto en esta página. Sigue leyendo sin salir de la página."
+        },
+        {
+          "selector": "#phrase",
+          "neededActivation": false,
+          "retries": 1,
+          "translation": "Buenos días, ¿cómo estás?"
+        }
+      ]
+    },
+    {
+      "surface": "HTTP local",
+      "capabilities": {
+        "secure": true,
+        "api": "function",
+        "availability": "downloadable"
+      },
+      "samples": [
+        {
+          "selector": "#word",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "Hola"
+        }
+      ]
+    },
+    {
+      "surface": "HTTP local / translator=()",
+      "capabilities": {
+        "secure": true,
+        "api": "function",
+        "availability": "unavailable"
+      },
+      "samples": [],
+      "status": "Esta página o navegador no permite traducir de inglés a español."
+    },
+    {
+      "surface": "HTTPS / nuevo documento",
+      "capabilities": {
+        "secure": true,
+        "api": "function",
+        "availability": "available"
+      },
+      "samples": [
+        {
+          "selector": "#word",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "Hola"
+        }
+      ]
+    },
+    {
+      "surface": "HTTPS / recarga",
+      "samples": [
+        {
+          "selector": "#word",
+          "neededActivation": false,
+          "retries": 0,
+          "translation": "Hola"
+        }
+      ]
+    }
+  ],
+  "extensionId": "mbfcaekpppifiljhbabihhhlbljkmjfi"
+}
