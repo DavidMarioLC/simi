@@ -2,7 +2,7 @@ export type TranslationState =
   | { kind: 'hidden' | 'checking' | 'activation-required' | 'preparing' | 'translating' }
   | { kind: 'downloading'; progress?: number }
   | { kind: 'translated'; text: string }
-  | { kind: 'unavailable' | 'error'; message: string };
+  | { kind: 'unavailable' | 'error'; message: string; retryable?: boolean };
 
 export type TranslatorFactory = Pick<typeof Translator, 'create' | 'availability'>;
 const languages = { sourceLanguage: 'en', targetLanguage: 'es' };
@@ -14,6 +14,8 @@ export class TranslationController {
   private generation = 0;
   private running = false;
   private disposed = false;
+  private lifecycle = 0;
+  private preparationAbort?: AbortController;
   private preparationState: TranslationState = { kind: 'preparing' };
 
   constructor(
@@ -46,7 +48,7 @@ export class TranslationController {
       const availability = await this.factory.availability(languages);
       if (this.current !== request || this.disposed) return;
       if (availability === 'unavailable') {
-        this.show({ kind: 'unavailable', message: 'Esta página o navegador no permite traducir de inglés a español.' });
+        this.show({ kind: 'unavailable', retryable: true, message: 'Chrome no tiene disponible el traductor local de inglés a español. Cierra otras pestañas donde hayas usado Simi y reintenta. Si persiste, reinicia Chrome.' });
       } else if (this.hasActivation()) {
         this.activate();
       } else {
@@ -63,23 +65,31 @@ export class TranslationController {
     if (this.translator) { void this.request(this.current.text); return; }
     this.preparationState = { kind: 'preparing' };
     this.show(this.preparationState);
+    const lifecycle = this.lifecycle;
+    const abort = new AbortController();
+    this.preparationAbort = abort;
     try {
       const creation = this.factory.create({
         ...languages,
+        signal: abort.signal,
         monitor: monitor => monitor.addEventListener('downloadprogress', event => {
+          if (lifecycle !== this.lifecycle || this.disposed) return;
           this.preparationState = { kind: 'downloading', progress: Math.max(0, Math.min(1, event.loaded)) };
           this.show(this.preparationState);
         }),
       });
-      this.preparing = creation.then(translator => {
-        if (this.disposed) { translator.destroy(); return; }
+      const preparation = creation.then(translator => {
+        if (this.disposed || lifecycle !== this.lifecycle) { translator.destroy(); return; }
         this.translator = translator;
       }).catch(() => {
-        this.show({ kind: 'error', message: 'No se pudo preparar la traducción. Comprueba tu conexión y reintenta.' });
+        if (lifecycle === this.lifecycle) this.show({ kind: 'error', message: 'No se pudo preparar la traducción. Comprueba tu conexión y reintenta.' });
       }).finally(() => {
+        if (this.preparing !== preparation) return;
         this.preparing = undefined;
+        this.preparationAbort = undefined;
         if (this.translator && !this.disposed) void this.pump();
       });
+      this.preparing = preparation;
     } catch {
       this.show({ kind: 'error', message: 'No se pudo preparar la traducción. Puedes reintentar.' });
     }
@@ -91,17 +101,27 @@ export class TranslationController {
     else this.activate();
   }
 
+  recheck() { if (this.current) void this.request(this.current.text); }
+
   close() {
     this.current = undefined;
     ++this.generation;
     if (!this.disposed) this.emit({ kind: 'hidden' });
   }
 
-  dispose() {
+  suspend() {
     this.close();
-    this.disposed = true;
+    ++this.lifecycle;
+    this.preparationAbort?.abort();
+    this.preparationAbort = undefined;
+    this.preparing = undefined;
     this.translator?.destroy();
     this.translator = undefined;
+  }
+
+  dispose() {
+    this.suspend();
+    this.disposed = true;
   }
 
   private show(state: TranslationState) {
@@ -114,13 +134,14 @@ export class TranslationController {
     try {
       while (this.current && this.translator && !this.disposed) {
         const request = this.current;
+        const translator: Translator = this.translator;
         this.show({ kind: 'translating' });
         try {
-          const result = await this.translator.translate(request.text);
+          const result = await translator.translate(request.text);
           if (this.current === request) this.show({ kind: 'translated', text: result });
         } catch (error) {
           if (this.current === request) this.show({ kind: 'error', message: 'No se pudo traducir este texto. Reintenta o selecciona un fragmento más corto.' });
-          if (error instanceof Error && error.name === 'InvalidStateError') {
+          if (error instanceof Error && error.name === 'InvalidStateError' && this.translator === translator) {
             this.translator?.destroy();
             this.translator = undefined;
             if (this.current && this.current !== request) this.show({ kind: 'activation-required' });

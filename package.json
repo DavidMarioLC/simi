@@ -17,9 +17,11 @@
     "probe:native": "node scripts/probe-native.mjs",
     "probe:notebooks": "node scripts/probe-notebooks.mjs",
     "test": "playwright test",
-    "test:unit": "playwright test translation.spec.ts"
+    "test:unit": "playwright test translation.spec.ts",
+    "probe:pdf": "node scripts/probe-pdf.mjs"
   },
   "dependencies": {
+    "pdfjs-dist": "6.4.299",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

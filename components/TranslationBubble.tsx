@@ -45,9 +45,9 @@ export function TranslationBubble({ state, activate, retry, close, position }: P
         : <p className="text-slate-600">{status}</p>}
     </div>
     {state.kind === 'downloading' && <progress aria-label="Descarga del modelo" value={state.progress} max={1} className="mt-[12px] h-[5px] w-full accent-indigo-600" />}
-    {(state.kind === 'activation-required' || state.kind === 'error') && <>
-      <button onClick={state.kind === 'error' ? retry : activate} className="mt-[12px] cursor-pointer rounded-[8px] bg-indigo-600 px-[14px] py-[8px] text-[13px] font-medium text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
-        {state.kind === 'error' ? 'Reintentar' : 'Activar traducción'}
+    {(state.kind === 'activation-required' || state.kind === 'error' || (state.kind === 'unavailable' && state.retryable)) && <>
+      <button onClick={state.kind === 'activation-required' ? activate : retry} className="mt-[12px] cursor-pointer rounded-[8px] bg-indigo-600 px-[14px] py-[8px] text-[13px] font-medium text-white hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+        {state.kind === 'activation-required' ? 'Activar traducción' : 'Reintentar'}
       </button>
       {state.kind === 'activation-required' && <p className="mt-[8px] text-[12px] leading-[17px] text-slate-400">La primera vez puede descargarse un modelo.</p>}
     </>}

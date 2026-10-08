@@ -49,7 +49,7 @@ La instalación de hooks se omite en CI. La comprobación de traducciones con mo
 
 ## Permisos y privacidad
 
-El content script solicita acceso a páginas HTTP/HTTPS para detectar selecciones automáticamente. Chrome permite controlar su acceso por sitio. El permiso `storage` se destina a preferencias locales. No se solicitan permisos para el historial, pestañas, panel lateral ni proveedores de traducción remotos.
+El content script solicita acceso a páginas HTTP/HTTPS para detectar selecciones automáticamente. Chrome permite controlar su acceso por sitio. El permiso `storage` se destina a preferencias locales. El permiso `activeTab` permite conocer la URL de la pestaña al abrir el popup para usar «Abrir en Simi»; el visor PDF puede solicitar acceso opcional al origen del documento. No se solicitan permisos de historial, cookies, panel lateral ni proveedores de traducción remotos.
 
 La traducción usa modelos locales de Chrome. La primera preparación puede necesitar conexión para descargar recursos. El contenido no se envía a un servicio externo ni se guarda como historial.
 
@@ -63,11 +63,21 @@ Si aparece «Activar traducción», púlsalo para preparar el traductor de ese d
 
 Cierra la burbuja con Escape, el botón de cierre o un clic fuera. Una nueva selección cambia el resultado. Los resultados largos tienen desplazamiento interno. Desde el icono de Simi puedes activar o desactivar la traducción automática; esa preferencia se conserva localmente y se aplica a las pestañas abiertas.
 
+## PDFs de internet y archivos locales
+
+Para un PDF de internet abierto en una pestaña, abre el popup y pulsa **Abrir en Simi**. Se abre otra pestaña con el visor opcional; el visor habitual y el documento original permanecen disponibles. Si falta acceso al sitio, pulsa «Permitir acceso al sitio» en el visor. Algunos sitios con sesión o enlaces temporales pueden impedir la carga; en ese caso, descarga una copia y ábrela como archivo local.
+
+Para un PDF de tu computadora, pulsa **Abrir PDF local** en el popup y elige el archivo en el visor. El archivo se lee en tu dispositivo, sin subirlo a un servicio externo y sin habilitar acceso a `file://`.
+
+El visor incluye páginas, zoom y búsqueda. Al seleccionar texto, aparece automáticamente la burbuja de traducción. Puede pedir la activación inicial del modelo. Un nuevo renderizado por zoom cierra la selección anterior; selecciona de nuevo. Las páginas escaneadas sin texto y los PDFs que requieren contraseña no ofrecen traducción por selección en esta versión.
+
+Consulta [la compatibilidad del visor PDF](docs/pdf-compatibility.md). Después de actualizar la extensión, recárgala en `chrome://extensions`. No necesitas cambiar tu visor PDF predeterminado.
+
 ## Compatibilidad y límites
 
-La versión mínima declarada es Chrome 138, pero se comprueba la API y el par inglés a español en cada documento. Una página puede bloquear la API mediante su política de permisos; HTTP remoto no seguro puede no ofrecerla. La primera preparación puede fallar: utiliza «Reintentar» y comprueba la conexión. Recargar o navegar puede requerir otra activación.
+La versión mínima declarada es Chrome 138, pero se comprueba la API y el par inglés a español en cada documento. Una página puede bloquear la API mediante su política de permisos; HTTP remoto no seguro puede no ofrecerla. La primera preparación puede fallar: utiliza «Reintentar» y comprueba la conexión. Al dejar una pestaña o desactivar Simi se libera el traductor local para evitar agotar los servicios de Chrome. Al volver, una nueva selección lo prepara de nuevo. Si Chrome indica que no está disponible, cierra otras pestañas donde hayas usado Simi y pulsa «Reintentar»; si persiste, guarda tu trabajo y reinicia Chrome.
 
-Esta versión cubre texto seleccionable del documento principal de páginas web accesibles para la extensión y el visor incrustado de notebooks `.ipynb` de `github.com` servido por `notebooks.githubusercontent.com`. No traduce campos de formulario, contenido editable, otros iframes, el visor PDF integrado, páginas internas de Chrome ni Chrome Web Store. GitHub Enterprise y otros visores de notebooks quedan fuera de esta excepción. No detecta automáticamente el idioma de origen: asume inglés. La extensión traduce la selección visible; no descarga ni ejecuta el notebook ni traduce el archivo completo.
+Esta versión cubre texto seleccionable del visor PDF propio de Simi, del documento principal de páginas web accesibles para la extensión y del visor incrustado de notebooks `.ipynb` de `github.com` servido por `notebooks.githubusercontent.com`. No traduce campos de formulario, contenido editable, otros iframes, el visor PDF integrado, páginas internas de Chrome ni Chrome Web Store. GitHub Enterprise y otros visores de notebooks quedan fuera de esta excepción. No detecta automáticamente el idioma de origen: asume inglés. La extensión traduce la selección visible; no descarga ni ejecuta el notebook ni traduce el archivo completo.
 
 Consulta [la evidencia de compatibilidad](docs/translator-compatibility.md) para distinguir lo comprobado con Chrome real de las pruebas con simulaciones.
 
@@ -79,6 +89,7 @@ npm run typecheck
 npm run build
 npm test
 npm run probe:native
+npm run probe:pdf
 npm run zip
 ```
 
@@ -89,3 +100,5 @@ npm run zip
 `npm run probe:notebooks` comprueba el flujo en notebooks públicos reales de GitHub con Chrome instalado y Translator API nativa. Requiere acceso a GitHub y puede descargar los modelos de Chrome. Guarda evidencia temporal en `test-results/native-notebooks.json` y `test-results/native-notebook.png`.
 
 El ZIP de WXT queda en `.output/`. Para instalar localmente usa la carpeta `.output/chrome-mv3`; no hace falta publicar en la tienda.
+
+`npm run probe:pdf` comprueba Translator API real y el visor PDF compilado con Chrome instalado y un perfil temporal. Guarda evidencia de textos sintéticos en `test-results/native-pdf-probe.json`.

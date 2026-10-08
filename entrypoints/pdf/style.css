@@ -1,0 +1,26 @@
+html, body, #root { height:100%; margin:0; }
+body { font-family:system-ui,sans-serif; color:#172033; background:#e8edf4; }
+.pdf-app { height:100%; display:flex; flex-direction:column; }
+.pdf-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:12px 18px; background:#fff; border-bottom:1px solid #dce3ed; z-index:2; font-size:13px; }
+.pdf-brand { display:flex; align-items:center; gap:12px; margin-right:12px; }
+.pdf-brand strong { color:#4f46e5; font-size:22px; }
+.pdf-brand span { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pdf-toolbar button, .pdf-message button { border:1px solid #dce3ed; border-radius:7px; background:#fff; padding:6px 10px; cursor:pointer; }
+button:disabled { opacity:.45; cursor:default; }
+.pdf-toolbar input { border:1px solid #dce3ed; border-radius:6px; padding:5px 8px; }
+.pdf-navigation { display:flex; align-items:center; gap:6px; }
+.pdf-navigation input { width:60px; }
+.pdf-toolbar form { display:flex; align-items:center; gap:5px; margin-left:auto; }
+.pdf-toolbar form input { width:155px; }
+.pdf-message { padding:8px 18px; font-size:13px; line-height:24px; background:#f8faff; border-bottom:1px solid #dce3ed; }
+.pdf-message span { margin-left:12px; color:#815214; }
+.pdf-message button, .pdf-message a { margin-left:10px; }
+.pdf-message a { color:#4338ca; text-decoration:underline; }
+.pdf-container { position:absolute; inset:0; overflow:auto; }
+.pdf-app { position:relative; }
+/* PDFViewer requiere un contenedor absoluto; el área de lectura sigue la altura de los controles. */
+.pdf-container { top:var(--pdf-top,110px); }
+.pdfViewer .page { margin:16px auto; border:0; box-shadow:0 2px 14px #15254226; }
+.pdf-bubble-host { position:fixed; inset:0; pointer-events:none; z-index:10; }
+.pdf-bubble-host button { cursor:pointer; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline:2px solid #6366f1; outline-offset:2px; }

@@ -1,0 +1,270 @@
+import { test, expect, chromium, type Page } from '@playwright/test';
+import { mkdtemp, rm, cp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { pdfFixture } from '../scripts/pdf-fixture.mjs';
+
+async function setup(origins: string[] = []) {
+  const profile = await mkdtemp(join(tmpdir(), 'simi-pdf-test-'));
+  const context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true,
+    ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging', '--enable-caret-browsing'], viewport: { width: 1100, height: 800 } });
+  let extensionPath = resolve('.output/chrome-mv3');
+  if (origins.length) {
+    // Solo el fixture de red preautoriza sus orígenes: Chromium headless no puede aceptar el diálogo nativo.
+    extensionPath = join(profile, 'test-extension');
+    await cp(resolve('.output/chrome-mv3'), extensionPath, { recursive: true });
+    const manifestPath = join(extensionPath, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.host_permissions = origins;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+  }
+  const cdp = await context.browser()!.newBrowserCDPSession();
+  const { id } = await cdp.send('Extensions.loadUnpacked', { path: extensionPath });
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    const mock = { mode: 'available', calls: [] as string[], creates: 0, destroys: 0, delay: 0 };
+    Object.assign(globalThis, { __pdfMock: mock, Translator: class {
+      static availability() { return Promise.resolve(mock.mode === 'absent' ? 'unavailable' : 'available'); }
+      static async create(options: { monitor?: (monitor: EventTarget) => void }) {
+        mock.creates++;
+        if (mock.mode === 'create-error') throw new Error('Synthetic');
+        if (mock.mode === 'download') { const monitor = new EventTarget(); options.monitor?.(monitor); const event = new Event('downloadprogress'); Object.assign(event, { loaded: .5 }); monitor.dispatchEvent(event); await new Promise(r => setTimeout(r, 100)); }
+        return new this();
+      }
+      async translate(text: string) { mock.calls.push(text); await new Promise(r => setTimeout(r, mock.delay)); if (mock.mode === 'error') throw new Error('Synthetic'); return `ES: ${text}`; }
+      destroy() { mock.destroys++; }
+    } });
+  });
+  page.on('pageerror', error => console.log('PDF page error:', error.message));
+  await page.goto(`chrome-extension://${id}/pdf.html`);
+  return { context, id, page, cleanup: async () => { await context.close(); await rm(profile, { recursive: true, force: true }); } };
+}
+async function upload(page: Page, blank = false) {
+  await page.getByLabel('Archivo PDF local').setInputFiles({ name: 'synthetic.pdf', mimeType: 'application/pdf', buffer: pdfFixture(blank) });
+  await expect(page.getByLabel('Estado del documento')).toContainText('Selecciona texto', { timeout: 8000 });
+  if (!blank) await expect(page.locator('.textLayer').first()).toContainText('Hello world');
+}
+async function select(page: Page, text = 'Hello world', keyboard = false) {
+  const span = page.locator('.textLayer:not([hidden]) span').filter({ hasText: text }).first();
+  await span.evaluate((element, keyboard) => {
+    const range = document.createRange(); range.selectNodeContents(element);
+    const selection = getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+    document.dispatchEvent(keyboard ? new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }) : new PointerEvent('pointerup', { bubbles: true }));
+  }, keyboard);
+}
+async function activate(page: Page) {
+  const button = page.getByRole('button', { name: 'Activar traducción', exact: true });
+  await button.or(page.getByTestId('translation-result')).waitFor();
+  if (await button.isVisible()) await button.click();
+  await expect(page.getByTestId('translation-result')).toBeVisible();
+}
+
+test('PDF local: render, lectura, búsqueda y burbuja automática', async () => {
+  const f = await setup();
+  try {
+    await upload(f.page);
+    await f.page.getByLabel('Archivo PDF local').setInputFiles([]);
+    await expect(f.page.locator('.textLayer').first()).toContainText('Hello world');
+    await select(f.page); await activate(f.page);
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Hello world');
+    await select(f.page, 'Good morning', true);
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Good morning');
+    await f.page.getByRole('button', { name: 'Cerrar traducción' }).click();
+    await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    await f.page.getByRole('button', { name: 'Aumentar zoom' }).click();
+    await expect(f.page.locator('.textLayer:not([hidden])').first()).toContainText('Hello world');
+    await select(f.page); await expect(f.page.getByTestId('translation-result')).toBeVisible();
+    await f.page.keyboard.press('Escape');
+    await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    await f.page.getByRole('button', { name: 'Página siguiente' }).click();
+    await expect(f.page.getByLabel('Página', { exact: true })).toHaveValue('2');
+    await f.page.getByLabel('Buscar en PDF').fill('Hello');
+    await expect(f.page.getByLabel('Resultados de búsqueda')).toContainText('de 2');
+    await f.page.getByRole('button', { name: 'Coincidencia siguiente' }).click();
+    await f.page.getByLabel('Buscar en PDF').fill('notfoundxyz');
+    await expect(f.page.getByLabel('Resultados de búsqueda')).toHaveText('Sin coincidencias');
+    expect(await f.page.evaluate(() => (globalThis as any).__pdfMock.creates)).toBe(1);
+  } finally { await f.cleanup(); }
+});
+
+test('PDF: archivos inválidos, página sin texto y sustitución', async () => {
+  const f = await setup();
+  try {
+    await f.page.getByLabel('Archivo PDF local').setInputFiles({ name: 'invalid.pdf', mimeType: 'application/pdf', buffer: Buffer.from('<html>login</html>') });
+    await expect(f.page.getByLabel('Estado del documento')).toContainText('no es un PDF válido');
+    await f.page.getByLabel('Archivo PDF local').setInputFiles({ name: 'protected.pdf', mimeType: 'application/pdf', buffer: pdfFixture(false, true) });
+    await expect(f.page.getByLabel('Estado del documento')).toContainText('requiere contraseña');
+    await upload(f.page, true);
+    await expect(f.page.getByLabel('Estado del documento')).toContainText('no tiene texto seleccionable');
+    await upload(f.page);
+    await select(f.page); await activate(f.page);
+    await upload(f.page, true);
+    await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    await expect(f.page.getByLabel('Estado del documento')).toContainText('no tiene texto seleccionable');
+  } finally { await f.cleanup(); }
+});
+
+test('PDF: preferencia, resultados pendientes, zoom y cierre', async () => {
+  const f = await setup();
+  try {
+    await upload(f.page); await select(f.page); await activate(f.page);
+    await f.page.evaluate(() => { (globalThis as any).__pdfMock.delay = 300; });
+    await select(f.page, 'Good morning'); await select(f.page);
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Hello world');
+    await select(f.page, 'Good morning'); await f.page.keyboard.press('Escape');
+    await f.page.waitForTimeout(400); await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    await select(f.page); await expect(f.page.getByTestId('translation-result')).toBeVisible();
+    await f.page.getByRole('button', { name: 'Aumentar zoom' }).click();
+    await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    await f.page.evaluate(() => (globalThis as any).chrome.storage.local.set({ enabled: false }));
+    await select(f.page); await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    await f.page.evaluate(() => (globalThis as any).chrome.storage.local.set({ enabled: true }));
+    await select(f.page, 'Good morning'); await activate(f.page); await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Good morning');
+  } finally { await f.cleanup(); }
+});
+
+test('PDF: descarga, indisponibilidad y reintento conservan lectura', async () => {
+  const f = await setup();
+  try {
+    await upload(f.page);
+    await f.page.evaluate(() => { (globalThis as any).__pdfMock.mode = 'absent'; });
+    await select(f.page); await expect(f.page.getByRole('region', { name: 'Traducción al español' })).toContainText('no tiene disponible');
+    await f.page.evaluate(() => { (globalThis as any).__pdfMock.mode = 'download'; });
+    await f.page.getByRole('button', { name: 'Reintentar', exact: true }).click();
+    await activate(f.page);
+    await f.page.evaluate(() => { (globalThis as any).__pdfMock.mode = 'error'; });
+    await select(f.page, 'Good morning'); await expect(f.page.getByRole('button', { name: 'Reintentar', exact: true })).toBeVisible();
+    await f.page.evaluate(() => { (globalThis as any).__pdfMock.mode = 'available'; });
+    await f.page.getByRole('button', { name: 'Reintentar', exact: true }).click();
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Good morning');
+    await expect(f.page.locator('.textLayer').first()).toContainText('Good morning');
+  } finally { await f.cleanup(); }
+});
+
+test('PDF remoto: popup, sesión, URL sin sufijo, redirección y errores', async () => {
+  const { createServer } = await import('node:http');
+  const server = createServer((request, response) => {
+    if (request.url === '/redirect') { response.writeHead(302, { Location: `http://localhost:${(server.address() as any).port}/document` }); response.end(); return; }
+    if (request.url === '/login') { response.setHeader('Content-Type', 'text/html'); response.end('<html>Sign in</html>'); return; }
+    if (request.url === '/private' && !request.headers.cookie?.includes('session=synthetic')) { response.writeHead(401); response.end(); return; }
+    response.setHeader('Content-Type', 'application/pdf');
+    if (request.url === '/slow') { setTimeout(() => response.end(pdfFixture(true)), 600); return; }
+    response.end(pdfFixture());
+  });
+  await new Promise<void>(r => server.listen(0, '0.0.0.0', r));
+  const origin = `http://127.0.0.1:${(server.address() as any).port}`;
+  const f = await setup(['http://127.0.0.1/*', 'http://localhost/*']);
+  try {
+    await f.context.addCookies([{ name: 'session', value: 'synthetic', url: origin, sameSite: 'Lax' }]);
+    const popup = await f.context.newPage();
+    await popup.goto(`chrome-extension://${f.id}/popup.html`);
+    const original = await f.context.newPage();
+    await original.goto(`${origin}/document`);
+    async function open(url: string) {
+      const event = f.context.waitForEvent('page');
+      await popup.evaluate(async url => {
+        const reply = await (globalThis as any).chrome.runtime.sendMessage({ channel: 'simi-pdf-v1', kind: 'open', url });
+        if (reply?.error) throw new Error(reply.error);
+      }, url);
+      const viewer = await event;
+      await viewer.waitForLoadState();
+      return viewer;
+    }
+    const localEvent = f.context.waitForEvent('page');
+    await popup.getByRole('button', { name: 'Abrir PDF local', exact: true }).click();
+    const localViewer = await localEvent; await upload(localViewer);
+    const remote = await open(`${origin}/document`);
+    await expect(remote.getByLabel('Estado del documento')).toContainText('Selecciona texto');
+    await expect(remote.locator('.textLayer').first()).toContainText('Hello world');
+    expect(remote.url()).not.toContain(origin);
+    expect(original.url()).toBe(`${origin}/document`);
+    const slow = await open(`${origin}/slow`);
+    await expect(slow.getByLabel('Estado del documento')).toContainText('Cargando');
+    await upload(slow);
+    await slow.waitForTimeout(800);
+    await expect(slow.locator('.textLayer').first()).toContainText('Hello world');
+    const privatePage = await open(`${origin}/private`);
+    await expect(privatePage.getByLabel('Estado del documento')).toContainText('Selecciona texto');
+    const redirected = await open(`${origin}/redirect`);
+    await expect(redirected.getByLabel('Estado del documento')).toContainText('Selecciona texto');
+    const login = await open(`${origin}/login`);
+    await expect(login.getByLabel('Estado del documento')).toContainText('no es un PDF válido');
+    await expect(login.getByRole('link', { name: 'Abrir original' })).toHaveAttribute('href', `${origin}/login`);
+    await f.context.clearCookies();
+    const denied = await open(`${origin}/private`);
+    await expect(denied.getByLabel('Estado del documento')).toContainText('No se pudo acceder');
+    await remote.reload();
+    await expect(remote.getByLabel('Estado del documento')).toContainText('Abre un PDF local');
+    const rejected = await f.page.evaluate(() => (globalThis as any).chrome.runtime.sendMessage({ channel: 'simi-pdf-v1', kind: 'open', url: 'https://example.com/secret.pdf' }));
+    expect(rejected == null).toBe(true);
+    const invalid = await popup.evaluate(() => (globalThis as any).chrome.runtime.sendMessage({ channel: 'simi-pdf-v1', kind: 'open', url: 'chrome://settings' }));
+    expect(invalid.error).toBeTruthy();
+    expect(await f.page.evaluate(() => (globalThis as any).chrome.storage.local.get(null))).toEqual({});
+  } finally { await f.cleanup(); server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); }
+});
+
+test('PDF: selección real, varias páginas, geometría y acceso sin permiso', async () => {
+  const f = await setup();
+  try {
+    await upload(f.page);
+    const first = f.page.locator('.textLayer:not([hidden]) span').filter({ hasText: 'Hello world' }).first();
+    const box = (await first.boundingBox())!;
+    await f.page.mouse.move(box.x + 1, box.y + box.height / 2);
+    await f.page.mouse.down(); await f.page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 15 }); await f.page.mouse.up();
+    await activate(f.page);
+    await expect(f.page.getByTestId('translation-result')).toContainText('Hello');
+    await f.page.locator('.pdf-container').focus();
+    await first.evaluate(element => {
+      const range = document.createRange(); range.setStart(element.firstChild!, 0); range.collapse(true);
+      const selection = getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+    });
+    await f.page.keyboard.down('Shift');
+    for (let i = 0; i < 5; i++) await f.page.keyboard.press('ArrowRight');
+    await f.page.keyboard.up('Shift');
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Hello');
+    const rectangle = await f.page.getByRole('region', { name: 'Traducción al español' }).boundingBox();
+    expect(rectangle!.x).toBeGreaterThanOrEqual(0); expect(rectangle!.y).toBeGreaterThanOrEqual(0);
+    expect(rectangle!.x + rectangle!.width).toBeLessThanOrEqual(1100);
+    await f.page.locator('.pdf-container').evaluate(e => { e.scrollTop = 2000; });
+    await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    await expect(f.page.locator('.textLayer').filter({ hasText: 'second page' })).toBeVisible();
+    await f.page.evaluate(() => {
+      const spans = [...document.querySelectorAll('.textLayer span')];
+      const first = spans.find(s => s.textContent === 'Hello world')!, last = spans.find(s => s.textContent?.includes('second page'))!;
+      const range = document.createRange(); range.setStart(first.firstChild!, 0); range.setEnd(last.firstChild!, last.textContent!.length);
+      const selection = getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+    });
+    await expect(f.page.getByTestId('translation-result')).toContainText('Hello world');
+    await expect(f.page.getByTestId('translation-result')).toContainText('second page');
+    await f.page.getByTestId('translation-result').click();
+    await f.page.keyboard.press('Escape');
+    await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    const popup = await f.context.newPage(); await popup.goto(`chrome-extension://${f.id}/popup.html`);
+    const event = f.context.waitForEvent('page');
+    await popup.evaluate(() => (globalThis as any).chrome.runtime.sendMessage({ channel: 'simi-pdf-v1', kind: 'open', url: 'https://example.com/document.pdf' }));
+    const remote = await event;
+    await expect(remote.getByLabel('Estado del documento')).toContainText('Permite el acceso');
+    await expect(remote.getByRole('button', { name: 'Permitir acceso al sitio' })).toBeVisible();
+    expect(await remote.locator('canvas').count()).toBe(0);
+  } finally { await f.cleanup(); }
+});
+
+test('PDF: cambiar de pestaña libera el traductor y se recupera al volver', async () => {
+  const f = await setup();
+  try {
+    await upload(f.page); await select(f.page); await activate(f.page);
+    const opened = f.context.waitForEvent('page');
+    await f.page.evaluate(async () => {
+      const current = await (globalThis as any).chrome.tabs.getCurrent();
+      await (globalThis as any).chrome.tabs.create({ windowId: current.windowId, url: 'about:blank', active: true });
+    });
+    const other = await opened;
+    await expect(f.page.getByTestId('translation-result')).toHaveCount(0);
+    expect(await f.page.evaluate(() => (globalThis as any).__pdfMock.destroys)).toBe(1);
+    await other.close(); await f.page.bringToFront();
+    await select(f.page, 'Good morning'); await activate(f.page);
+    await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Good morning');
+    expect(await f.page.evaluate(() => (globalThis as any).__pdfMock.creates)).toBe(2);
+  } finally { await f.cleanup(); }
+});

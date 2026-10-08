@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-08T19:39:28.197Z",
+  "simulated": false,
+  "samples": [
+    "hola mundo",
+    "¡Buenos días"
+  ],
+  "version": "154.0.8037.98",
+  "testPermissions": "Copia temporal del paquete con origen del fixture y PDF público preautorizados; no valida el diálogo de concesión de Chrome.",
+  "context": "Página de extensión / pdf.html / mundo principal",
+  "capabilities": {
+    "secure": true,
+    "api": "function",
+    "availability": "downloadable"
+  },
+  "local": {
+    "first": "hola mundo",
+    "second": "¡Buenos días",
+    "afterZoom": "hola mundo",
+    "tabSwitchCloses": true,
+    "afterTabSwitch": "¡Buenos días",
+    "scrollCloses": true
+  },
+  "remote": {
+    "first": "hola mundo",
+    "originalRetained": true,
+    "sourceUrlExcludedFromViewer": true
+  },
+  "publicPdf": {
+    "source": "PDF de ejemplo público de Mozilla PDF.js",
+    "pages": "14"
+  },
+  "storage": {},
+  "appNetwork": [
+    {
+      "origin": "http://127.0.0.1:54502",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "origin": "http://127.0.0.1:54502",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "origin": "http://127.0.0.1:54502",
+      "method": "GET",
+      "hasBody": false
+    },
+    {
+      "origin": "https://mozilla.github.io",
+      "method": "GET",
+      "hasBody": false
+    }
+  ]
+}

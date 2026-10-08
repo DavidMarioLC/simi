@@ -115,3 +115,52 @@ test('cerrar durante preparación no reabre la burbuja', async () => {
   await tick();
   expect(f.states.at(-1)?.kind).toBe('hidden');
 });
+
+test('suspender libera el traductor y permite preparar uno al volver', async () => {
+  const f = fixture();
+  await f.controller.request('hello'); f.controller.activate(); await tick();
+  f.controller.suspend();
+  expect(f.destroyed).toBe(1);
+  expect(f.states.at(-1)?.kind).toBe('hidden');
+  await f.controller.request('morning');
+  expect(f.states.at(-1)?.kind).toBe('activation-required');
+  f.controller.activate(); await tick();
+  expect(f.creations).toBe(2);
+  expect(f.states.at(-1)).toEqual({ kind: 'translated', text: 'ES:morning' });
+});
+
+test('indisponibilidad temporal permite volver a comprobar sin crear a ciegas', async () => {
+  const states: TranslationState[] = [];
+  let availability: Availability = 'unavailable', creations = 0;
+  const controller = new TranslationController(() => ({
+    availability: async () => availability,
+    create: async () => { creations++; return { translate: async (text: string) => `ES:${text}`, destroy() {} } as Translator; },
+  }), state => states.push(state), () => true);
+  await controller.request('hello');
+  expect(states.at(-1)).toMatchObject({ kind: 'unavailable', retryable: true });
+  controller.recheck(); await tick();
+  expect(creations).toBe(0);
+  availability = 'available'; controller.recheck(); await tick();
+  expect(states.at(-1)).toEqual({ kind: 'translated', text: 'ES:hello' });
+});
+
+test('una preparación suspendida no ocupa recursos ni sustituye la nueva', async () => {
+  const states: TranslationState[] = [], completions: ((translator: Translator) => void)[] = [];
+  const signals: AbortSignal[] = [];
+  let oldDestroyed = 0;
+  const controller = new TranslationController(() => ({
+    availability: async () => 'available',
+    create: options => { signals.push(options.signal!); return new Promise<Translator>(r => completions.push(r)); },
+  }), state => states.push(state), () => false);
+  await controller.request('old'); controller.activate();
+  controller.suspend();
+  expect(signals[0]!.aborted).toBe(true);
+  await controller.request('new'); controller.activate();
+  completions[0]!({ translate: async () => 'old result', destroy() { oldDestroyed++; } } as unknown as Translator);
+  await tick();
+  expect(oldDestroyed).toBe(1);
+  expect(states.at(-1)?.kind).toBe('preparing');
+  completions[1]!({ translate: async () => 'new result', destroy() {} } as unknown as Translator);
+  await tick();
+  expect(states.at(-1)).toEqual({ kind: 'translated', text: 'new result' });
+});

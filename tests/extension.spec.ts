@@ -240,7 +240,7 @@ for (const mode of ['unavailable', 'absent', 'create-error']) {
         await f.page.getByRole('button', { name: 'Reintentar' }).click();
         await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Hello world');
       } else {
-        await expect(f.page.getByRole('status')).toContainText(mode === 'absent' ? 'no está disponible' : 'no permite');
+        await expect(f.page.getByRole('status')).toContainText(mode === 'absent' ? 'no está disponible' : 'no tiene disponible');
         await expect(f.page.getByRole('button', { name: 'Activar traducción' })).toHaveCount(0);
       }
     } finally { await f.cleanup(); }
@@ -464,7 +464,7 @@ for (const mode of ['absent', 'unavailable']) {
     const f = await setupNotebook(mode);
     try {
       await selectNotebook(f.page);
-      await expect(f.page.getByRole('status')).toContainText(mode === 'absent' ? 'no está disponible' : 'no permite');
+      await expect(f.page.getByRole('status')).toContainText(mode === 'absent' ? 'no está disponible' : 'no tiene disponible');
       await expect(f.page.getByRole('button', { name: 'Activar traducción' })).toHaveCount(0);
       expect(await mockValue(f.session, f.world, '__simiMock.calls.length')).toBe(0);
     } finally { await f.cleanup(); }

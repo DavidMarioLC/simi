@@ -4,6 +4,7 @@ import { TranslationController, type TranslationState } from '../lib/translation
 import { NotebookHost } from '../lib/notebook-host';
 import { notebookRect, type Geometry } from '../lib/notebooks';
 import '../assets/tailwind.css';
+import { positionBubble } from '../lib/selection-geometry';
 
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*'],
@@ -30,20 +31,14 @@ export default defineContentScript({
       const rect = captured.kind === 'notebook' ? notebookRect(captured.iframe, captured.geometry)
         : [...captured.range.getClientRects()].find(r => r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth);
       if (!rect) { close(); return; }
-      const gap = 8;
-      const size = panel.getBoundingClientRect();
-      const x = Math.max(gap, Math.min(innerWidth - size.width - gap, (rect.left + rect.right) / 2 - size.width / 2));
-      const above = rect.top - size.height - gap;
-      const y = above >= gap ? above : Math.max(gap, Math.min(rect.bottom + gap, innerHeight - size.height - gap));
-      panel.style.left = `${x}px`;
-      panel.style.top = `${y}px`;
-      panel.dataset.placement = above >= gap ? 'above' : 'below';
+      positionBubble(panel, rect);
     };
     const render = (state: TranslationState) => {
       if (!ctx.isValid || !root) return;
-      root.render(<TranslationBubble state={state} activate={() => controller.activate()} retry={() => controller.retry()} close={close} position={position} />);
+      root.render(<TranslationBubble state={state} activate={() => controller.activate()} retry={() => state.kind === 'unavailable' ? controller.recheck() : controller.retry()} close={close} position={position} />);
     };
     const controller = new TranslationController(() => typeof Translator === 'undefined' ? undefined : Translator, render);
+    ctx.onInvalidated(() => controller.dispose());
     const notebooks = new NotebookHost({
       enabled: () => enabled && ctx.isValid,
       close,
@@ -130,13 +125,15 @@ export default defineContentScript({
       notebookChanges.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['src', 'style', 'class', 'hidden'] });
       ctx.onInvalidated(() => notebookChanges.disconnect());
     }
-    ctx.addEventListener(window, 'pagehide', event => { if (event.persisted) close(); else controller.dispose(); });
+    ctx.addEventListener(document, 'visibilitychange', () => { if (document.hidden) { close(); controller.suspend(); } });
+    ctx.addEventListener(window, 'pagehide', event => { if (event.persisted) { close(); controller.suspend(); } else controller.dispose(); });
     let preferenceRevision = 0;
     const onPreference = (changes: Record<string, { newValue?: unknown }>, area: string) => {
       if (area !== 'local' || !changes.enabled) return;
       preferenceRevision++;
       enabled = changes.enabled.newValue !== false;
       close();
+      if (!enabled) controller.suspend();
     };
     browser.storage.onChanged.addListener(onPreference);
     ctx.onInvalidated(() => browser.storage.onChanged.removeListener(onPreference));
