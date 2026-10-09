@@ -36,7 +36,7 @@ export function App() {
       if (reply?.error) setError(reply.error);
     } catch { setError('No se pudo abrir el visor. Reintenta.'); }
   }
-  return <main className="w-[300px] bg-slate-50 p-[24px] font-sans text-slate-900">
+  return <main className="w-[300px] bg-simi-soft p-[24px] font-sans text-simi-ink">
     <header className="mb-[24px] flex items-center gap-[12px]">
       <BrandIcon className="h-[40px] w-[40px] rounded-[12px]" />
       <div><h1 className="text-[22px] font-semibold">Simi</h1><p className="text-[12px] text-slate-500">Inglés → Español</p></div>
@@ -44,15 +44,15 @@ export function App() {
     <div className="flex items-center justify-between gap-[12px] rounded-[12px] border border-slate-200 bg-white p-[14px]">
       <span className="text-[14px] font-medium">Traducción automática</span>
       <button type="button" role="switch" aria-label="Traducción automática" aria-checked={enabled === true} disabled={enabled == null || saving} onClick={toggle}
-        className={`relative h-[24px] w-[42px] shrink-0 cursor-pointer rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 ${enabled ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+        className={`relative h-[24px] w-[42px] shrink-0 cursor-pointer rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-simi-focus disabled:opacity-50 ${enabled ? 'bg-simi-brand' : 'bg-slate-300'}`}>
         <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white transition-[left] ${enabled ? 'left-[21px]' : 'left-[3px]'}`} />
       </button>
     </div>
     <p className="mt-[16px] text-[13px] leading-[20px] text-slate-600">Selecciona una palabra, frase o párrafo en una página web. La traducción aparecerá junto al texto.</p>
     <p className="mt-[12px] text-[12px] leading-[18px] text-slate-400">Se traduce en tu dispositivo. La primera activación puede descargar un modelo.</p>
     <div className="mt-[16px] flex flex-col gap-[8px]">
-      <button onClick={openRemote} className="rounded-[8px] bg-indigo-600 px-[14px] py-[9px] text-[13px] font-medium text-white">Abrir en Simi</button>
-      <button onClick={() => { void browser.tabs.create({ url: browser.runtime.getURL('/pdf.html') }); }} className="rounded-[8px] border border-slate-200 bg-white px-[14px] py-[9px] text-[13px]">Abrir PDF local</button>
+      <button onClick={openRemote} className="rounded-[8px] bg-simi-action px-[14px] py-[9px] text-[13px] font-medium text-white hover:bg-simi-action-hover active:bg-simi-action-active focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-simi-focus">Abrir en Simi</button>
+      <button onClick={() => { void browser.tabs.create({ url: browser.runtime.getURL('/pdf.html') }); }} className="rounded-[8px] border border-slate-200 bg-white px-[14px] py-[9px] text-[13px] hover:bg-simi-soft active:bg-simi-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-simi-focus">Abrir PDF local</button>
     </div>
     {error && <p role="alert" className="mt-[12px] text-[12px] text-red-700">{error}</p>}
   </main>;

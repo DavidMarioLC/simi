@@ -1,4 +1,15 @@
 @import "tailwindcss";
+@import "./brand.css";
+
+@theme inline {
+  --color-simi-brand: var(--simi-brand);
+  --color-simi-action: var(--simi-action);
+  --color-simi-action-hover: var(--simi-action-hover);
+  --color-simi-action-active: var(--simi-action-active);
+  --color-simi-soft: var(--simi-soft);
+  --color-simi-ink: var(--simi-ink);
+  --color-simi-focus: var(--simi-focus);
+}
 
 @theme {
   --spacing: 4px;
@@ -10,6 +21,23 @@
   font-size: 14px;
   line-height: 20px;
   isolation: isolate;
+}
+
+#simi-bubble progress {
+  appearance: none;
+  background: var(--simi-soft);
+}
+
+#simi-bubble progress::-webkit-progress-bar {
+  background: var(--simi-soft);
+}
+
+#simi-bubble progress::-webkit-progress-value {
+  background: var(--simi-brand);
+}
+
+#simi-bubble progress::-moz-progress-bar {
+  background: var(--simi-brand);
 }
 
 :host {
