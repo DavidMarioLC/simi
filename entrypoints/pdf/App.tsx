@@ -5,6 +5,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { EventBus, PDFViewer, PDFLinkService, PDFFindController } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import { mountPdfSelection } from '../../lib/pdf-selection';
 import { originPermission, pdfChannel, remotePdfUrl } from '../../lib/pdf-session';
+import { BrandIcon } from '../../components/BrandIcon';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -141,7 +142,7 @@ export function App() {
   }
   return <main className="pdf-app">
     <header className="pdf-toolbar">
-      <div className="pdf-brand"><strong>Simi</strong><span title={title}>{title}</span></div>
+      <div className="pdf-brand"><div className="pdf-brand-identity"><BrandIcon className="h-[28px] w-[28px] rounded-[8px]" /><strong>Simi</strong></div><span title={title}>{title}</span></div>
       <button onClick={() => input.current?.click()}>Abrir PDF local</button>
       <input ref={input} hidden type="file" accept="application/pdf,.pdf" aria-label="Archivo PDF local" onChange={event => {
         const file = event.target.files?.[0]; event.target.value = ''; if (file) void engine.current?.load(file);
