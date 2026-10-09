@@ -43,7 +43,7 @@ export function App() {
     });
     layout.observe(document.querySelector('.pdf-toolbar')!);
     layout.observe(document.querySelector('.pdf-message')!);
-    bus.on('pagesinit', () => { viewer.currentScaleValue = 'page-width'; });
+    bus.on('pagesinit', () => { viewer.currentScale = 1; });
     bus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => { setNumber(pageNumber); setNoText(pageText.get(pageNumber) === false); });
     bus.on('scalechanging', ({ scale }: { scale: number }) => setZoom(Math.round(scale * 100)));
     bus.on('textlayerrendered', ({ pageNumber }: { pageNumber: number }) => {
