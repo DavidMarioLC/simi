@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { TranslationState } from '../lib/translation';
+import { BrandIcon } from './BrandIcon';
 
 interface Props {
   state: TranslationState;
@@ -34,7 +35,7 @@ export function TranslationBubble({ state, activate, retry, close, position }: P
     className="pointer-events-auto fixed box-border w-[320px] max-w-[calc(100vw-16px)] rounded-[16px] border border-slate-200 bg-white p-[16px] font-sans text-[14px] leading-[20px] text-slate-900 shadow-xl">
     <header className="mb-[10px] flex items-center justify-between gap-[12px]">
       <div className="flex items-center gap-[8px]">
-        <span className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-indigo-50 text-[12px] font-bold text-indigo-600" aria-hidden="true">S</span>
+        <BrandIcon className="h-[28px] w-[28px] rounded-[8px]" />
         <span className="text-[12px] font-semibold tracking-wide text-slate-500">INGLÉS <span aria-hidden="true">→</span> ESPAÑOL</span>
       </div>
       <button aria-label="Cerrar traducción" onClick={close} className="flex h-[26px] w-[26px] cursor-pointer items-center justify-center rounded-[6px] text-[20px] text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-indigo-600">×</button>

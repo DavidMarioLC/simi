@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
 import { pdfChannel, remotePdfUrl } from '../../lib/pdf-session';
+import { BrandIcon } from '../../components/BrandIcon';
 
 export function App() {
   const [enabled, setEnabled] = useState<boolean>();
@@ -37,7 +38,7 @@ export function App() {
   }
   return <main className="w-[300px] bg-slate-50 p-[24px] font-sans text-slate-900">
     <header className="mb-[24px] flex items-center gap-[12px]">
-      <span aria-hidden="true" className="flex h-[40px] w-[40px] items-center justify-center rounded-[12px] bg-indigo-600 text-[20px] font-semibold text-white">S</span>
+      <BrandIcon className="h-[40px] w-[40px] rounded-[12px]" />
       <div><h1 className="text-[22px] font-semibold">Simi</h1><p className="text-[12px] text-slate-500">Inglés → Español</p></div>
     </header>
     <div className="flex items-center justify-between gap-[12px] rounded-[12px] border border-slate-200 bg-white p-[14px]">
