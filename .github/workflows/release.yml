@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validar y empaquetar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar el commit etiquetado
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Configurar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Validar tag, versiones y notas
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/release.mjs validate "$RELEASE_TAG"
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Probar herramientas de entrega
+        run: npm run test:release
+      - name: Instalar Chromium y dependencias del sistema
+        run: npx playwright install --with-deps chromium
+      - name: Comprobar tipos
+        run: npm run typecheck
+      - name: Empaquetar extensión
+        run: npm run zip
+      - name: Probar la salida final
+        run: npm test
+      - name: Validar ZIP y preparar notas
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/release.mjs bundle "$RELEASE_TAG" .output/release-bundle
+      - name: Transferir entrega validada
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: .output/release-bundle/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Guardar resultados de Playwright
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-playwright-results
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    name: Publicar Release
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Descargar herramientas del mismo commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Configurar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Recuperar entrega validada
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: .output/release-bundle
+      - name: Crear Release sin sobrescribir entregas existentes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/release.mjs publish "$RELEASE_TAG" .output/release-bundle

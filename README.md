@@ -17,7 +17,7 @@ npm run dev
 
 `npm ci` instala automáticamente los hooks versionados de `.githooks` mediante `core.hooksPath` local. En un clon que ya tiene dependencias, ejecuta `npm run hooks:install`. Si tienes otra ruta de hooks configurada, la instalación se detiene para que puedas revisar el conflicto antes de reemplazarla.
 
-- **Pre-commit:** `npm run check:commit` comprueba tipos y ejecuta las pruebas unitarias.
+- **Pre-commit:** `npm run check:commit` comprueba tipos y ejecuta las pruebas unitarias, incluidas las herramientas de entrega.
 - **Pre-push:** `npm run check:push` compila la extensión y ejecuta todas las pruebas.
 
 Antes del primer push instala el navegador de pruebas:
@@ -30,7 +30,7 @@ Cualquier fallo bloquea la operación. Los hooks validan el árbol de trabajo ac
 
 ## Integración continua
 
-El workflow `.github/workflows/ci.yml` ejecuta `npm run check:ci` en cada push y pull request de GitHub: comprueba tipos, compila y ejecuta todas las pruebas. Usa Ubuntu y Node.js 24, instala dependencias con `npm ci` y prepara Chromium con las bibliotecas del sistema. Puedes consultar la ejecución en la pestaña **Actions** del repositorio y descargar el informe HTML de Playwright durante 7 días.
+El workflow `.github/workflows/ci.yml` ejecuta `npm run check:ci` en cada push y pull request de GitHub: prueba las herramientas de entrega, comprueba tipos, compila y ejecuta todas las pruebas de la extensión. Usa Ubuntu y Node.js 24, instala dependencias con `npm ci` y prepara Chromium con las bibliotecas del sistema. Puedes consultar la ejecución en la pestaña **Actions** del repositorio y descargar el informe HTML de Playwright durante 7 días.
 
 Para ejecutar los mismos controles localmente:
 
@@ -41,6 +41,10 @@ npm run check:ci
 La instalación de hooks se omite en CI. La comprobación de traducciones con modelos reales, `npm run probe:native`, continúa siendo manual.
 
 ## Instalación de la extensión
+
+Para instalar una entrega, abre [Releases](https://github.com/DavidMarioLC/simi/releases) y descarga `simi-X.Y.Z-chrome.zip` de la versión elegida. Descomprímelo en una carpeta permanente, abre `chrome://extensions`, activa «Modo de desarrollador» y usa «Cargar descomprimida» sobre la carpeta que contiene `manifest.json`. Los archivos **Source code** de GitHub contienen el código fuente y no son el paquete compilado de la extensión. Si todavía no hay Releases publicadas, usa la instalación desde el código descrita a continuación.
+
+Al actualizar una instalación descomprimida, reemplaza el contenido de su carpeta con el nuevo ZIP, recarga la extensión desde `chrome://extensions` y recarga las pestañas abiertas. Conserva la ruta de la carpeta. Estas instalaciones no se actualizan automáticamente desde GitHub.
 
 1. Ejecutar `npm run build`.
 2. Abrir `chrome://extensions` y activar «Modo de desarrollador».
@@ -102,3 +106,51 @@ npm run zip
 El ZIP de WXT queda en `.output/`. Para instalar localmente usa la carpeta `.output/chrome-mv3`; no hace falta publicar en la tienda.
 
 `npm run probe:pdf` comprueba Translator API real y el visor PDF compilado con Chrome instalado y un perfil temporal. Guarda evidencia de textos sintéticos en `test-results/native-pdf-probe.json`.
+
+## Versiones y Releases
+
+Cada cambio queda registrado en Git; varios commits pueden agruparse en una entrega. `package.json` es la fuente de versión y WXT la incorpora al manifiesto. `package-lock.json` debe conservar el mismo valor en `version` y `packages[""].version`. Se mantiene `private: true`: no distribuimos la extensión mediante npm ni GitHub Packages.
+
+Usamos `MAJOR.MINOR.PATCH`, con tres enteros de 0 a 65535, sin ceros iniciales, sufijos ni la versión `0.0.0`:
+
+- Corrección: `0.1.0` pasa a `0.1.1`.
+- Funcionalidad: `0.1.1` pasa a `0.2.0`.
+- Durante `0.x`, una incompatibilidad incrementa MINOR y debe advertirse explícitamente en las notas. A partir de `1.0.0`, incrementa MAJOR.
+- Documentación o herramientas sin cambios del producto pueden acumularse sin incrementar su versión. `1.0.0` se reserva para la decisión de ofrecer una base estable.
+
+Las notas se preparan en [CHANGELOG.md](CHANGELOG.md), con sección pendiente y un bloque único `## [X.Y.Z]` por entrega. Las fechas son opcionales; una entrada preparada no implica publicación. El bloque inicial `0.1.0` resume el estado actual sin inventar lanzamientos históricos.
+
+Para preparar la siguiente versión, actualiza versión y lockfile juntos, sin crear un tag automáticamente:
+
+```sh
+npm version 0.1.1 --no-git-tag-version
+```
+
+Prepara las notas correspondientes y revisa los cambios antes de hacer commit. Para comprobar una entrega localmente (ejemplo de la primera versión):
+
+```sh
+npm run test:release
+node scripts/release.mjs validate v0.1.0
+npm run typecheck
+npm run zip
+npm test
+node scripts/release.mjs bundle v0.1.0 /tmp/simi-release-0.1.0
+```
+
+El último comando valida el ZIP y escribe únicamente el paquete compilado y `notes.md` en una carpeta nueva. Requiere `unzip`, incluido en los runners Ubuntu de GitHub y en macOS. Las pruebas se ejecutan sobre la salida final del empaquetado. Los probes con modelos reales siguen siendo manuales; las pruebas simuladas de CI no acreditan la disponibilidad del modelo nativo.
+
+Después de integrar los archivos y confirmar que estás en el commit que quieres publicar, crea y envía deliberadamente el tag anotado. Para la primera entrega, conserva `0.1.0`:
+
+```sh
+git status --short
+git tag -a v0.1.0 -m "Simi 0.1.0"
+git push origin refs/tags/v0.1.0
+```
+
+El árbol de trabajo debe estar limpio y el commit debe incluir versión, notas y workflow; el tag no incluye archivos sin commit. Para otras entregas sustituye la versión en todos los comandos. No muevas ni reutilices tags publicados.
+
+El workflow `.github/workflows/release.yml` se activa con tags `v*` y rechaza los que no sean `vX.Y.Z` o no coincidan con los metadatos. Descarga el commit etiquetado, valida las notas, instala dependencias con `npm ci`, comprueba tipos, empaqueta y ejecuta las pruebas. Verifica la versión del manifiesto, los recursos y la correspondencia del ZIP con la carpeta compilada. Solo después transfiere ese ZIP y sus notas a un job de publicación, sin recompilar.
+
+Solo el job de publicación usa `contents: write` mediante `GITHUB_TOKEN`. Las políticas de Actions del repositorio y de su organización deben permitir ese permiso. No necesitas secretos npm ni de Chrome. La Release se crea con `gh release create --verify-tag --notes-file`; los tags se preparan explícitamente y una Release existente no se sobrescribe.
+
+Si una ejecución falla antes de crear la Release por un problema transitorio, usa **Re-run failed jobs** en Actions sobre el mismo tag. Un cambio del código o del workflow requiere un nuevo commit y una versión nueva. Si quedó una Release parcial, inspecciónala y resuelve su estado explícitamente: los reintentos rechazan Releases existentes. Un error de red o de permisos al consultar GitHub detiene el proceso; no se interpreta como ausencia de Release. Comprueba la entrega final en Releases y descarga el ZIP publicado. Implementar este mecanismo no publica por sí solo la primera entrega.

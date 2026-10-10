@@ -13,11 +13,12 @@
     "hooks:install": "node scripts/install-hooks.mjs",
     "check:commit": "npm run typecheck && npm run test:unit",
     "check:push": "npm run build && npm test",
-    "check:ci": "npm run typecheck && npm run check:push",
+    "check:ci": "npm run test:release && npm run typecheck && npm run check:push",
     "probe:native": "node scripts/probe-native.mjs",
     "probe:notebooks": "node scripts/probe-notebooks.mjs",
     "test": "playwright test",
-    "test:unit": "playwright test translation.spec.ts",
+    "test:unit": "npm run test:release && playwright test translation.spec.ts",
+    "test:release": "node --test scripts/release.test.mjs",
     "probe:pdf": "node scripts/probe-pdf.mjs"
   },
   "dependencies": {
