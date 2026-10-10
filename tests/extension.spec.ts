@@ -53,7 +53,7 @@ async function attachMock(context: BrowserContext, page: Page, extensionId: stri
         __simiMock.calls.push(text);
         if (__simiMock.failOnce) { __simiMock.failOnce = false; throw new Error('quota'); }
         await new Promise(r => setTimeout(r, text.includes('Slow') ? 350 : 30));
-        return __simiMock.mode === 'long' ? 'Traducción larga. '.repeat(500) : 'ES: ' + text;
+        return __simiMock.result ?? (__simiMock.mode === 'long' ? 'Traducción larga. '.repeat(500) : 'ES: ' + text);
       }
       destroy() {}
     };
@@ -109,13 +109,92 @@ test('palabra, frase y párrafos: activación, selección vigente y original int
     await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Hello world');
     await select(f.page, '#phrase', 'keyboard');
     await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Good morning, how are you?');
+    await bubble(f.page).screenshot({ path: 'test-results/minimal-bubble-phrase.png' });
     await select(f.page, '#paragraphs');
     await expect(f.page.getByTestId('translation-result')).toContainText('Keep reading');
+    await bubble(f.page).screenshot({ path: 'test-results/minimal-bubble-paragraphs.png' });
     const calls = await mockValue(f.session, f.world, '__simiMock.calls');
     expect(calls[2]).toContain('\n');
     expect(await mockValue(f.session, f.world, '__simiMock.creates')).toBe(1);
     await expect(f.page.locator('#word')).toHaveText('Hello world');
     await f.page.screenshot({ path: 'test-results/bubble.png' });
+  } finally { await f.cleanup(); }
+});
+
+test('burbuja compacta: identidad, ancho por contenido y cierre accesible', async () => {
+  const f = await setup();
+  try {
+    await f.page.locator('#word').evaluate(el => el.textContent = 'Run');
+    await mockValue(f.session, f.world, "__simiMock.result = 'Correr'");
+    await select(f.page, '#word');
+    await bubble(f.page).screenshot({ path: 'test-results/minimal-bubble-activation.png' });
+    await f.page.getByRole('button', { name: 'Activar traducción' }).click();
+    const result = f.page.getByTestId('translation-result');
+    await expect(result).toHaveText('Correr');
+    await expect(bubble(f.page)).toHaveAccessibleDescription('Del inglés al español');
+    await expect(bubble(f.page)).not.toContainText('INGLÉS');
+    const panel = (await bubble(f.page).boundingBox())!;
+    const text = (await result.boundingBox())!;
+    const close = f.page.getByRole('button', { name: 'Cerrar traducción' });
+    const control = (await close.boundingBox())!;
+    const logo = (await bubble(f.page).locator('[aria-hidden=true]').boundingBox())!;
+    expect(panel.width).toBeLessThan(320);
+    expect(panel.height).toBeLessThan(55);
+    expect(logo.width).toBe(16); expect(logo.height).toBe(16);
+    expect(control.width).toBeGreaterThanOrEqual(26); expect(control.height).toBeGreaterThanOrEqual(26);
+    expect(Math.abs(text.y + text.height / 2 - control.y - control.height / 2)).toBeLessThan(1);
+    await bubble(f.page).screenshot({ path: 'test-results/minimal-bubble-word.png' });
+    await close.focus();
+    expect(await close.evaluate(el => getComputedStyle(el).outlineStyle)).not.toBe('none');
+    await f.page.keyboard.press('Enter');
+    await expect(bubble(f.page)).toHaveCount(0);
+    await mockValue(f.session, f.world, '__simiMock.result = undefined');
+    await select(f.page, '#phrase');
+    await expect(result).toContainText('Good morning');
+    expect((await bubble(f.page).boundingBox())!.width).toBeGreaterThan(panel.width);
+  } finally { await f.cleanup(); }
+});
+
+test('burbuja compacta: cadenas sin espacios y cierre visible con scroll interno', async () => {
+  const f = await setup();
+  try {
+    await f.page.setViewportSize({ width: 280, height: 350 });
+    await mockValue(f.session, f.world, "__simiMock.result = 'Traduccion'.repeat(500)");
+    await prepared(f.page);
+    const panel = bubble(f.page), result = f.page.getByTestId('translation-result');
+    const bounds = (await panel.boundingBox())!;
+    expect(bounds.width).toBeLessThanOrEqual(264);
+    expect(bounds.x).toBeGreaterThanOrEqual(8);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(272);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(342);
+    expect(await result.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await result.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    await result.evaluate(el => el.scrollTop = el.scrollHeight);
+    await expect(f.page.getByRole('button', { name: 'Cerrar traducción' })).toBeInViewport();
+    await panel.screenshot({ path: 'test-results/minimal-bubble-narrow.png' });
+    await f.page.getByRole('button', { name: 'Cerrar traducción' }).click();
+    await expect(panel).toHaveCount(0);
+  } finally { await f.cleanup(); }
+});
+
+test('burbuja compacta: cambio de tamaño de estado a resultado en el borde', async () => {
+  const f = await setup();
+  try {
+    await mockValue(f.session, f.world, "__simiMock.result = 'Correr'");
+    await select(f.page, '#edge');
+    const before = (await bubble(f.page).boundingBox())!;
+    await f.page.getByRole('button', { name: 'Activar traducción' }).click();
+    await expect(f.page.getByTestId('translation-result')).toHaveText('Correr');
+    const after = (await bubble(f.page).boundingBox())!;
+    expect(after.width).toBeLessThan(before.width);
+    expect(after.x + after.width).toBeLessThanOrEqual(892);
+    await f.page.setViewportSize({ width: 400, height: 700 });
+    await expect.poll(async () => {
+      const r = (await bubble(f.page).boundingBox())!;
+      return r.x + r.width;
+    }).toBeLessThanOrEqual(392);
+    await f.page.keyboard.press('Escape');
+    await expect(bubble(f.page)).toHaveCount(0);
   } finally { await f.cleanup(); }
 });
 
@@ -416,6 +495,26 @@ test('notebook: selección en iframe, teclado, párrafos e interfaz única en el
       const s = getSelection()!, r = document.createRange(); r.selectNodeContents(element); s.removeAllRanges(); s.addRange(r);
       document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     });
+    await expect(bubble(f.page)).toHaveCount(0);
+  } finally { await f.cleanup(); }
+});
+
+test('notebook: burbuja compacta tras cambiar de estado y de tamaño', async () => {
+  const f = await setupNotebook();
+  try {
+    await mockValue(f.session, f.world, "__simiMock.result = 'Correr'");
+    await selectNotebook(f.page);
+    const before = (await bubble(f.page).boundingBox())!;
+    await f.page.getByRole('button', { name: 'Activar traducción' }).click();
+    await expect(f.page.getByTestId('translation-result')).toHaveText('Correr');
+    expect((await bubble(f.page).boundingBox())!.width).toBeLessThan(before.width);
+    await bubble(f.page).screenshot({ path: 'test-results/minimal-bubble-notebook.png' });
+    await f.page.setViewportSize({ width: 400, height: 700 });
+    await expect.poll(async () => {
+      const r = (await bubble(f.page).boundingBox())!;
+      return r.x + r.width;
+    }).toBeLessThanOrEqual(392);
+    await f.page.getByRole('button', { name: 'Cerrar traducción' }).click();
     await expect(bubble(f.page)).toHaveCount(0);
   } finally { await f.cleanup(); }
 });

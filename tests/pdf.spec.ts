@@ -22,7 +22,7 @@ async function setup(origins: string[] = []) {
   const { id } = await cdp.send('Extensions.loadUnpacked', { path: extensionPath });
   const page = await context.newPage();
   await page.addInitScript(() => {
-    const mock = { mode: 'available', calls: [] as string[], creates: 0, destroys: 0, delay: 0 };
+    const mock = { mode: 'available', calls: [] as string[], creates: 0, destroys: 0, delay: 0, result: undefined as string | undefined };
     Object.assign(globalThis, { __pdfMock: mock, Translator: class {
       static availability() { return Promise.resolve(mock.mode === 'absent' ? 'unavailable' : 'available'); }
       static async create(options: { monitor?: (monitor: EventTarget) => void }) {
@@ -31,7 +31,7 @@ async function setup(origins: string[] = []) {
         if (mock.mode === 'download') { const monitor = new EventTarget(); options.monitor?.(monitor); const event = new Event('downloadprogress'); Object.assign(event, { loaded: .5 }); monitor.dispatchEvent(event); await new Promise(r => setTimeout(r, 100)); }
         return new this();
       }
-      async translate(text: string) { mock.calls.push(text); await new Promise(r => setTimeout(r, mock.delay)); if (mock.mode === 'error') throw new Error('Synthetic'); return `ES: ${text}`; }
+      async translate(text: string) { mock.calls.push(text); await new Promise(r => setTimeout(r, mock.delay)); if (mock.mode === 'error') throw new Error('Synthetic'); return mock.result ?? `ES: ${text}`; }
       destroy() { mock.destroys++; }
     } });
   });
@@ -84,6 +84,42 @@ test('PDF local: render, lectura, búsqueda y burbuja automática', async () => 
     await f.page.getByLabel('Buscar en PDF').fill('notfoundxyz');
     await expect(f.page.getByLabel('Resultados de búsqueda')).toHaveText('Sin coincidencias');
     expect(await f.page.evaluate(() => (globalThis as any).__pdfMock.creates)).toBe(1);
+  } finally { await f.cleanup(); }
+});
+
+test('PDF: burbuja compacta, contenido largo y cierre visible en ventana estrecha', async () => {
+  const f = await setup();
+  try {
+    await f.page.setViewportSize({ width: 300, height: 400 });
+    await upload(f.page);
+    await f.page.evaluate(() => (globalThis as any).__pdfMock.result = 'Correr');
+    await select(f.page); await activate(f.page);
+    const panel = f.page.getByRole('region', { name: 'Traducción al español' });
+    await expect(f.page.getByTestId('translation-result')).toHaveText('Correr');
+    expect((await panel.boundingBox())!.width).toBeLessThan(320);
+    expect((await panel.boundingBox())!.height).toBeLessThan(55);
+    await expect(panel).toHaveAccessibleDescription('Del inglés al español');
+    await panel.screenshot({ path: 'test-results/minimal-bubble-pdf.png' });
+    await f.page.evaluate(() => (globalThis as any).__pdfMock.result = 'Traduccion'.repeat(500));
+    await f.page.locator('.textLayer:not([hidden]) span').filter({ hasText: 'Good morning' }).first().scrollIntoViewIfNeeded();
+    await select(f.page, 'Good morning'); await activate(f.page);
+    const result = f.page.getByTestId('translation-result');
+    await expect(result).toContainText('Traduccion');
+    const bounds = (await panel.boundingBox())!;
+    const container = (await f.page.locator('.pdf-container').boundingBox())!;
+    expect(bounds.width).toBeLessThanOrEqual(284);
+    expect(bounds.x).toBeGreaterThanOrEqual(8);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(292);
+    expect(bounds.y).toBeGreaterThanOrEqual(container.y + 8);
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(container.y + container.height - 8);
+    expect(await result.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await result.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    await result.evaluate(el => el.scrollTop = el.scrollHeight);
+    const close = f.page.getByRole('button', { name: 'Cerrar traducción' });
+    await expect(close).toBeInViewport();
+    await panel.screenshot({ path: 'test-results/minimal-bubble-pdf-narrow.png' });
+    await close.focus(); await f.page.keyboard.press('Enter');
+    await expect(panel).toHaveCount(0);
   } finally { await f.cleanup(); }
 });
 

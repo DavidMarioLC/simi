@@ -31,26 +31,23 @@ export function TranslationBubble({ state, activate, retry, close, position }: P
     : state.kind === 'error' || state.kind === 'unavailable' ? state.message
     : state.kind === 'downloading' ? `Descargando modelo…${state.progress == null ? '' : ` ${Math.round(state.progress * 100)}%`}`
     : messages[state.kind];
-  return <section ref={ref} id="simi-bubble" role="region" aria-label="Traducción al español"
-    className="pointer-events-auto fixed box-border w-[320px] max-w-[calc(100vw-16px)] rounded-[16px] border border-slate-200 bg-white p-[12px] font-sans text-[14px] leading-[20px] text-simi-ink shadow-xl">
-    <header className="mb-[8px] flex items-center justify-between gap-[12px]">
-      <div className="flex items-center gap-[6px]">
-        <BrandIcon className="h-[22px] w-[22px] rounded-[8px]" />
-        <span className="text-[11px] font-semibold tracking-wide text-slate-500">INGLÉS <span aria-hidden="true">→</span> ESPAÑOL</span>
+  return <section ref={ref} id="simi-bubble" role="region" aria-label="Traducción al español" aria-description="Del inglés al español"
+    className="pointer-events-auto fixed box-border grid w-max max-w-[min(320px,calc(100vw-16px))] grid-cols-[16px_minmax(0,1fr)_26px] items-start gap-[8px] rounded-[12px] border border-[#E5E5E5] bg-white p-[10px] font-sans text-[14px] leading-[20px] text-simi-ink shadow-[0_2px_8px_rgb(0_0_0/0.10)]">
+    <BrandIcon className="mt-[5px] h-[16px] w-[16px] rounded-[4px]" />
+    <div className="min-w-0 max-h-[min(320px,calc(var(--simi-bubble-max-height,100vh)-48px))] overflow-y-auto overscroll-contain [overflow-wrap:anywhere]">
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {state.kind === 'translated'
+          ? <p data-testid="translation-result" className="max-h-[min(320px,calc(var(--simi-bubble-max-height,100vh)-48px))] overflow-y-auto overscroll-contain whitespace-pre-wrap py-[1.5px] text-[15px] leading-[23px]">{state.text}</p>
+          : <p className="whitespace-pre-wrap py-[3px] text-slate-600">{status}</p>}
       </div>
-      <button aria-label="Cerrar traducción" onClick={close} className="flex h-[26px] w-[26px] cursor-pointer items-center justify-center rounded-[6px] text-[20px] text-slate-400 hover:bg-simi-soft active:bg-simi-soft hover:text-simi-ink active:text-simi-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-simi-focus">×</button>
-    </header>
-    <div role="status" aria-live="polite" aria-atomic="true">
-      {state.kind === 'translated'
-        ? <p data-testid="translation-result" className="max-h-[min(320px,calc(100vh-96px))] overflow-y-auto overscroll-contain whitespace-pre-wrap break-words text-[15px] leading-[23px]">{state.text}</p>
-        : <p className="text-slate-600">{status}</p>}
+      {state.kind === 'downloading' && <progress aria-label="Descarga del modelo" value={state.progress} max={1} className="mt-[8px] block h-[5px] w-full accent-simi-brand" />}
+      {(state.kind === 'activation-required' || state.kind === 'error' || (state.kind === 'unavailable' && state.retryable)) && <>
+        <button onClick={state.kind === 'activation-required' ? activate : retry} className="mt-[8px] max-w-full cursor-pointer rounded-[8px] bg-simi-action px-[14px] py-[8px] text-[13px] font-medium text-white hover:bg-simi-action-hover active:bg-simi-action-active focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-simi-focus">
+          {state.kind === 'activation-required' ? 'Activar traducción' : 'Reintentar'}
+        </button>
+        {state.kind === 'activation-required' && <p className="mt-[8px] text-[12px] leading-[17px] text-slate-400">La primera vez puede descargarse un modelo.</p>}
+      </>}
     </div>
-    {state.kind === 'downloading' && <progress aria-label="Descarga del modelo" value={state.progress} max={1} className="mt-[12px] h-[5px] w-full accent-simi-brand" />}
-    {(state.kind === 'activation-required' || state.kind === 'error' || (state.kind === 'unavailable' && state.retryable)) && <>
-      <button onClick={state.kind === 'activation-required' ? activate : retry} className="mt-[12px] cursor-pointer rounded-[8px] bg-simi-action px-[14px] py-[8px] text-[13px] font-medium text-white hover:bg-simi-action-hover active:bg-simi-action-active focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-simi-focus">
-        {state.kind === 'activation-required' ? 'Activar traducción' : 'Reintentar'}
-      </button>
-      {state.kind === 'activation-required' && <p className="mt-[8px] text-[12px] leading-[17px] text-slate-400">La primera vez puede descargarse un modelo.</p>}
-    </>}
+    <button aria-label="Cerrar traducción" onClick={close} className="flex h-[26px] w-[26px] cursor-pointer items-center justify-center rounded-[6px] text-[18px] text-slate-400 hover:bg-simi-soft active:bg-simi-soft hover:text-simi-ink active:text-simi-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-simi-focus">×</button>
   </section>;
 }

@@ -17,6 +17,7 @@ export function mountPdfSelection(container: HTMLElement, host: HTMLElement) {
     if (!range?.startContainer.isConnected || !range.endContainer.isConnected) { close(); return; }
     const bounds = container.getBoundingClientRect();
     if (bounds.height <= 16) { close(); return; }
+    element.style.setProperty('--simi-bubble-max-height', `${bounds.height}px`);
     element.style.maxHeight = `${bounds.height - 16}px`;
     element.style.overflowY = 'auto';
     const rect = [...range.getClientRects()].find(r => r.width > 0 && r.height > 0 && r.bottom > bounds.top && r.top < bounds.bottom && r.right > bounds.left && r.left < bounds.right);
