@@ -165,6 +165,81 @@ test('posición arriba, debajo, borde lateral, scroll y estilos aislados', async
   } finally { await f.cleanup(); }
 });
 
+for (const layer of ['cabecera', 'contexto de apilamiento', 'popover'] as const) {
+  test(`burbuja encima de ${layer}: controles, cierre y reapertura`, async () => {
+    const f = await setup();
+    try {
+      await f.page.evaluate(layer => {
+        const overlay = document.createElement('div');
+        overlay.id = 'site-overlay';
+        overlay.textContent = 'Contenido superpuesto del sitio';
+        overlay.style.cssText = 'position:fixed;inset:0 0 auto 0;height:260px;margin:0;padding:0;border:0;background:#17202a;color:white;z-index:2147483647';
+        if (layer === 'contexto de apilamiento') {
+          document.body.style.cssText = 'isolation:isolate;transform:translate(17px,9px)';
+          document.documentElement.append(overlay);
+        } else {
+          document.body.append(overlay);
+        }
+        if (layer === 'popover') {
+          overlay.popover = 'manual';
+          overlay.showPopover();
+        }
+        const control = document.createElement('div');
+        control.id = 'site-control';
+        control.textContent = 'Control del sitio';
+        control.style.cssText = 'position:fixed;right:20px;bottom:20px';
+        control.onclick = () => control.dataset.clicked = 'true';
+        document.body.append(control);
+      }, layer);
+      await select(f.page, '#word');
+      const activate = f.page.getByRole('button', { name: 'Activar traducción' });
+      await expect(activate).toBeVisible();
+      // La visibilidad CSS no detecta oclusión: comprobar quién recibe el clic.
+      expect(await activate.evaluate(button => {
+        const r = button.getBoundingClientRect();
+        return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === (button.getRootNode() as ShadowRoot).host;
+      })).toBe(true);
+      await activate.click();
+      await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Hello world');
+      if (layer === 'popover') await expect(f.page.locator('#site-overlay')).toHaveJSProperty('popover', 'manual');
+      await f.page.getByRole('button', { name: 'Cerrar traducción' }).click();
+      await expect(bubble(f.page)).toHaveCount(0);
+      expect(await f.page.locator('simi-translator').evaluate(host => host.shadowRoot!.querySelectorAll(':popover-open').length)).toBe(0);
+      if (layer === 'popover') expect(await f.page.locator('#site-overlay').evaluate(el => el.matches(':popover-open'))).toBe(true);
+      await select(f.page, '#word');
+      await expect(f.page.getByTestId('translation-result')).toHaveText('ES: Hello world');
+      await f.page.locator('#site-control').click();
+      await expect(f.page.locator('#site-control')).toHaveAttribute('data-clicked', 'true');
+      await expect(bubble(f.page)).toHaveCount(0);
+    } finally { await f.cleanup(); }
+  });
+}
+
+test('la capa superior conserva la apariencia y geometría de la burbuja', async () => {
+  const f = await setup();
+  try {
+    await prepared(f.page);
+    const comparison = await bubble(f.page).evaluate(panel => {
+      const reference = panel.cloneNode(true) as HTMLElement;
+      reference.removeAttribute('popover');
+      panel.parentElement!.append(reference);
+      const properties = ['width', 'height', 'padding', 'margin', 'border', 'borderRadius', 'boxShadow', 'backgroundColor', 'color', 'fontFamily', 'fontSize', 'lineHeight', 'overflow'];
+      const styles = (el: Element) => Object.fromEntries(properties.map(key => [key, (getComputedStyle(el) as unknown as Record<string, string>)[key]]));
+      const appearance = (el: Element) => [styles(el), ...[...el.querySelectorAll('*')].map(styles)];
+      const geometry = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      };
+      const result = { actual: appearance(panel), reference: appearance(reference), actualRect: geometry(panel), referenceRect: geometry(reference) };
+      reference.remove();
+      return result;
+    });
+    expect(comparison.actual).toEqual(comparison.reference);
+    expect(comparison.actualRect).toEqual(comparison.referenceRect);
+    await f.page.screenshot({ path: 'test-results/bubble-top-layer.png' });
+  } finally { await f.cleanup(); }
+});
+
 test('resultados largos tienen scroll interno sin salir de la ventana', async () => {
   const f = await setup('long');
   try {

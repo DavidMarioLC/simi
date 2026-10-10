@@ -31,6 +31,9 @@ export default defineContentScript({
       const rect = captured.kind === 'notebook' ? notebookRect(captured.iframe, captured.geometry)
         : [...captured.range.getClientRects()].find(r => r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth);
       if (!rect) { close(); return; }
+      // La capa superior evita que cabeceras y contextos del sitio tapen la burbuja.
+      panel.popover = 'manual';
+      if (!panel.matches(':popover-open')) panel.showPopover();
       positionBubble(panel, rect);
     };
     const render = (state: TranslationState) => {

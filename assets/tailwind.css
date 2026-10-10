@@ -23,6 +23,17 @@
   isolation: isolate;
 }
 
+#simi-bubble[popover] {
+  inset: auto;
+  margin: 0;
+  overflow: visible;
+}
+
+#simi-bubble::backdrop {
+  background: transparent;
+  pointer-events: none;
+}
+
 #simi-bubble progress {
   appearance: none;
   background: var(--simi-soft);
