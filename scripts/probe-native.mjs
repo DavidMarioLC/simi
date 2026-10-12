@@ -91,10 +91,13 @@ try {
   const http = await open(`${local}/`, 'HTTP local');
   await translate(http, '#word');
   const restricted = await open(`${local}/restricted`, 'HTTP local / translator=()');
+  expect(restricted.capabilities.availability).toBe('unavailable');
   await select('#word');
-  await expect(page.getByRole('status')).toContainText('no permite');
+  await expect(page.getByRole('status')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText(/no (?:tiene disponible|está disponible|permite)/);
   restricted.status = await page.getByRole('status').innerText();
-  expect(await page.getByRole('button', { name: 'Activar traducción' }).count()).toBe(0);
+  await expect(page.getByTestId('translation-result')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Activar traducción' })).toHaveCount(0);
   const reloaded = await open('https://example.com/?simi=reload', 'HTTPS / nuevo documento');
   await translate(reloaded, '#word');
   await page.reload();
