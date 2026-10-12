@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Política de privacidad de Simi, extensión para traducir texto del inglés al español con los modelos locales de Chrome.">
+  <meta name="color-scheme" content="light">
+  <title>Política de privacidad — Simi</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #302b27; background: #faf7f2; line-height: 1.7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 780px; margin: 0 auto; padding: 48px 24px 64px; }
+    .brand { color: #a8432a; font-size: 24px; font-weight: 750; text-decoration: none; }
+    h1 { font-size: clamp(30px, 6vw, 42px); line-height: 1.2; margin: 28px 0 12px; letter-spacing: -1px; }
+    h2 { font-size: 22px; line-height: 1.35; margin-top: 36px; }
+    p, li { max-width: 70ch; }
+    li + li { margin-top: 12px; }
+    ul { padding-left: 24px; }
+    a { color: #943820; text-underline-offset: 3px; overflow-wrap: anywhere; }
+    a:focus-visible { outline: 3px solid #a8432a; outline-offset: 4px; }
+    .date, footer { color: #655b52; font-size: 14px; }
+    .summary { padding: 20px 24px; border-left: 4px solid #a8432a; background: #f1e8de; margin: 28px 0; }
+    .summary p { margin: 0; }
+    footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #d9ccc0; }
+  </style>
+</head>
+<body>
+<main>
+  <a class="brand" href="https://github.com/DavidMarioLC/simi">Simi</a>
+  <h1>Política de privacidad</h1>
+  <p class="date">Última actualización: <time datetime="2026-10-12">12 de octubre de 2026</time> · Simi 0.1.0</p>
+  <div class="summary"><p>Simi traduce el texto que seleccionas del inglés al español mediante los modelos locales de Chrome. La extensión no envía tus selecciones a un servidor de traducción, no guarda un historial de traducciones y no incorpora publicidad ni herramientas de analítica.</p></div>
+
+  <h2>1. Responsable y alcance</h2>
+  <p>Simi es una extensión de Chrome mantenida por <a href="https://github.com/DavidMarioLC">DavidMarioLC</a>. Esta política describe cómo la extensión maneja información al traducir selecciones en páginas web, notebooks de GitHub y su visor de documentos PDF.</p>
+
+  <h2>2. Información que procesa Simi</h2>
+  <ul>
+    <li><strong>Texto seleccionado y traducciones.</strong> Simi lee la selección para traducirla y mostrar el resultado junto al texto. Utiliza temporalmente el texto y su posición en la página para colocar la burbuja. El texto puede contener información personal si tú la seleccionas. Simi no lo añade a un historial ni lo guarda en almacenamiento persistente.</li>
+    <li><strong>Notebooks de GitHub.</strong> La selección y su posición se comunican entre el visor incrustado y la página de GitHub mediante mensajes internos de la extensión. Este intercambio no envía la selección a un servidor de Simi.</li>
+    <li><strong>Preferencia de activación.</strong> Simi guarda localmente, mediante el almacenamiento de la extensión en Chrome, si la traducción automática está activada o desactivada. No sincroniza esta preferencia mediante su propio servicio.</li>
+    <li><strong>Documentos PDF.</strong> El visor lee el archivo local que eliges o descarga el PDF de la dirección que abres. Procesa el contenido, el nombre del archivo y las búsquedas dentro del documento durante su uso. No sube los archivos locales a un servidor ni crea una biblioteca persistente de documentos.</li>
+    <li><strong>Dirección de la pestaña.</strong> Al pulsar «Abrir en Simi», la extensión consulta la URL de la pestaña activa para abrir el documento en su visor. La dirección se transmite internamente mediante una sesión temporal; no se guarda como historial de navegación.</li>
+  </ul>
+
+  <h2>3. Procesamiento local y conexiones de red</h2>
+  <p>La traducción se realiza en el dispositivo mediante la API Translator de Chrome. Chrome puede necesitar conexión para descargar o preparar sus modelos de traducción. Estas descargas y el funcionamiento del navegador están gestionados por Chrome y sujetos a las políticas de Google.</p>
+  <p>Al abrir un PDF de internet, Simi realiza una solicitud al sitio que aloja el documento, que recibe la información habitual de una conexión, como la dirección IP y la URL solicitada. La solicitud puede incluir las cookies o credenciales de sesión que Chrome permita para ese sitio. Esto permite acceder a documentos que requieren una sesión iniciada. El documento se procesa en el visor de Simi; no se reenvía a un servicio de traducción.</p>
+  <p>Simi no tiene un servidor propio para recibir selecciones, traducciones o documentos. No incorpora telemetría, seguimiento publicitario ni un sistema de cuentas. No vende ni comparte estos datos para publicidad, evaluación crediticia u otros fines ajenos a la traducción solicitada.</p>
+
+  <h2>4. Permisos</h2>
+  <ul>
+    <li><strong>Almacenamiento:</strong> conserva la preferencia de activación en el navegador.</li>
+    <li><strong>Pestaña activa:</strong> permite consultar la dirección de la pestaña cuando utilizas la acción para abrir un PDF en Simi.</li>
+    <li><strong>Acceso a sitios HTTP y HTTPS:</strong> permite leer las selecciones y mostrar su traducción en los sitios autorizados. El visor solicita permiso para el sitio de origen cuando lo necesita para descargar un PDF. Puedes gestionar el acceso a sitios desde la configuración de extensiones de Chrome.</li>
+  </ul>
+
+  <h2>5. Conservación y control</h2>
+  <p>Las selecciones, traducciones y documentos se utilizan temporalmente durante la sesión. Simi no los escribe en un historial persistente. Puedes cerrar la burbuja o la pestaña del visor y desactivar la traducción automática desde el menú de la extensión.</p>
+  <p>La preferencia de activación permanece en el almacenamiento local de la extensión hasta que se cambia o elimina. Puedes restablecerla eliminando los datos de la extensión o desinstalando Simi. Los permisos concedidos se administran en Chrome.</p>
+  <p>Los modelos descargados, las cachés y otros datos administrados por Chrome o el sistema operativo se gestionan con sus propios controles. Simi no garantiza el borrado inmediato de todas las copias temporales que estos sistemas puedan mantener.</p>
+
+  <h2>6. Servicios externos y esta página</h2>
+  <p>Las páginas que visitas, GitHub, los sitios que alojan PDFs y Chrome tienen sus propias prácticas de privacidad. Esta página se publica con GitHub Pages; GitHub puede procesar información técnica de las visitas conforme a su <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">declaración de privacidad</a>. Esta página no carga fuentes, scripts de analítica ni recursos de terceros.</p>
+  <p>El uso de información por Simi se limita a ofrecer las funciones descritas y cumple la <a href="https://developer.chrome.com/docs/webstore/program-policies/user-data">Política de Datos del Usuario de Chrome Web Store</a>, incluidos los requisitos de uso limitado.</p>
+
+  <h2>7. Cambios y contacto</h2>
+  <p>Actualizaremos esta política cuando cambie el manejo de información de Simi e indicaremos la fecha de actualización en esta página.</p>
+  <p>Para consultas sobre privacidad, puedes abrir una solicitud en <a href="https://github.com/DavidMarioLC/simi/issues">GitHub Issues de Simi</a>. Las solicitudes son públicas: evita incluir selecciones, documentos o información personal sensible. Solo recibimos la información que decides publicar allí, y GitHub la gestiona conforme a sus propias políticas.</p>
+  <footer>Simi · Traducción de inglés a español con los modelos locales de Chrome.</footer>
+</main>
+</body>
+</html>
